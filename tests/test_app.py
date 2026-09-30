@@ -12,9 +12,12 @@ def _botao(at, rotulo):
 
 
 def _rodar():
+    # Erro de sintaxe no app.py não aparece em at.exception: confere a compilação antes
+    compile(Path(APP).read_text(encoding="utf-8"), APP, "exec")
     at = AppTest.from_file(APP, default_timeout=90)
     at.run()
     assert not at.exception, at.exception
+    assert at.tabs, "o app não desenhou nenhuma aba"
     return at
 
 
@@ -114,3 +117,12 @@ def test_imprevisto_invalido_mostra_erro_em_portugues():
     assert not at.exception
     assert any("precisa ser depois do horário marcado" in e.value for e in at.error)
     assert at.session_state["ocorrencias"] == []
+
+
+def test_mapa_das_poltronas_em_lista():
+    at = _rodar()
+    modo = next(r for r in at.radio if r.label == "Ver como")
+    modo.set_value("📋 Lista").run()
+    assert not at.exception, at.exception
+    textos = " ".join(m.value for m in at.markdown)
+    assert "Libera às" in textos and "tabela-grande" in textos

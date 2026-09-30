@@ -184,7 +184,7 @@ CSS = f"""
 .resumo.empilhado .kpi {{ flex-direction: column; align-items: flex-start; gap: 8px; }}
 
 /* ---------- Mapa das poltronas ---------- */
-.grade {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 12px; }}
+.grade {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }}
 .poltrona {{
   background: #fff; border: 1px solid {BORDA}; border-left: 10px solid var(--cor);
   border-radius: 12px; padding: 10px 12px; color: {TEXTO}; line-height: 1.35;
@@ -195,7 +195,7 @@ CSS = f"""
 .poltrona .selo {{
   display: inline-block; background: var(--tinta); border: 2px solid var(--cor);
   border-radius: 999px; padding: 2px 12px; margin: 6px 0; font-size: 18px; font-weight: 800;
-  white-space: nowrap;
+  white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
 }}
 .poltrona .det {{ font-size: 18px; }}
 .grupo {{ display: inline-flex; align-items: flex-start; gap: 6px; font-size: 17px; font-weight: 700;
@@ -368,6 +368,40 @@ def grade_poltronas(estado: pd.DataFrame, hhmm):
             f'<div class="selo">{icone} {texto}</div>'
             f'<div class="det">{"<br>".join(detalhes)}</div></div>')
     st.markdown(f'<div class="grade">{"".join(cartoes)}</div>', unsafe_allow_html=True)
+
+
+def lista_poltronas(estado: pd.DataFrame, hhmm):
+    """Mapa das poltronas em lista: uma linha por poltrona, a próxima a liberar primeiro.
+
+    Poltronas livres vêm por último, ordenadas pelo próximo paciente.
+    """
+    linhas = []
+    for _, r in estado.iterrows():
+        icone, texto = SITUACAO_POLTRONA[r["situacao"]][:2]
+        detalhe = ""
+        if r["situacao"] == P.AGUARDANDO:
+            espera = int(r["espera_min"])
+            if espera > P.LIMITE_ESPERA:
+                icone, texto = ESPERA_LONGA[0], "Aguardando bolsa (espera longa)"
+            detalhe = f"esperando há {espera} min"
+        elif r["situacao"] == P.INFUSAO and pd.notna(r["minutos_para_fim"]):
+            detalhe = f"faltam {int(round(r['minutos_para_fim']))} min de infusão"
+        if pd.notna(r["paciente"]):
+            paciente, grupo = r["paciente"], ROTULO[r["perfil"]]
+            libera, ordem = hhmm(r["libera_em"]), (0, r["libera_em"])
+        else:
+            paciente, grupo = "—", "—"
+            libera = "livre agora"
+            if pd.notna(r["proximo"]):
+                detalhe = f"próximo: {r['proximo']} às {hhmm(r['proximo_em'])}"
+                ordem = (1, r["proximo_em"])
+            else:
+                detalhe, ordem = "sem mais pacientes hoje", (2, 0)
+        linhas.append({"_ordem": ordem, "Poltrona": f"{int(r['poltrona']):02d}",
+                       "Situação": f"{icone} {texto}", "Paciente": paciente,
+                       "Tipo de tratamento": grupo, "Detalhe": detalhe, "Libera às": libera})
+    linhas.sort(key=lambda linha: linha["_ordem"])
+    tabela(pd.DataFrame(linhas).drop(columns="_ordem"))
 
 
 def caixa_alerta(tipo: str, texto: str):

@@ -299,8 +299,15 @@ with aba_painel:
             "O selo com a bolinha colorida mostra o **tipo de tratamento**, com as cores da "
             "folha do setor: 🔴 Longo, 🟠 Intermediário laranja, 🟤 Intermediário marrom, "
             "🟢 Rápido e 🔵 Injetável. O nome aparece sempre escrito junto.\n\n"
-            "**Libera às** é a previsão de quando a poltrona fica livre."))
-        ui.grade_poltronas(estado, hhmm)
+            "**Libera às** é a previsão de quando a poltrona fica livre.\n\n"
+            "**Ver como**: *Grade* mostra um cartão por poltrona (bom para TV); *Lista* "
+            "mostra uma linha por poltrona, ordenada pela próxima a liberar."))
+        modo = st.radio("Ver como", ["🔲 Grade", "📋 Lista"], horizontal=True,
+                        key="modo_poltronas")
+        if modo == "📋 Lista":
+            ui.lista_poltronas(estado, hhmm)
+        else:
+            ui.grade_poltronas(estado, hhmm)
 
     # Fila da capela
     st.write("")
