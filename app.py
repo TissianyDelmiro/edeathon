@@ -12,8 +12,10 @@ Abas:
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import json
 from datetime import datetime, time, timedelta
+from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
@@ -36,10 +38,25 @@ DATA_BASE = datetime(2026, 1, 1)  # data fictícia usada só para desenhar os gr
 
 
 # ---------------------------------------------------------------------------
-# Cálculo (guardado em cache: só refaz quando as premissas mudam)
+# Cálculo (guardado em cache: só refaz quando as premissas ou o código mudam)
 # ---------------------------------------------------------------------------
+def versao_do_codigo() -> str:
+    """Impressão digital dos módulos de cálculo e da tabela do setor.
+
+    Entra na chave do cache: depois de uma atualização (ex.: novo deploy), o app não
+    reaproveita um resultado calculado pela versão antiga do código.
+    """
+    pasta = Path(__file__).resolve().parent
+    arquivos = ["dados.py", "simulacao_atual.py", "otimizador.py", "indicadores.py",
+                "data/horarios_limite.csv"]
+    h = hashlib.sha256()
+    for nome in arquivos:
+        h.update((pasta / nome).read_bytes())
+    return h.hexdigest()[:12]
+
+
 @st.cache_data(show_spinner=False, max_entries=10)
-def calcular(premissas_json: str) -> dict:
+def calcular(premissas_json: str, versao: str) -> dict:
     prem = Premissas(**json.loads(premissas_json))
     dia = gerar_dia(prem)
     atual = simular_atual(dia, prem)
@@ -53,13 +70,16 @@ def para_json(prem: Premissas) -> str:
     return json.dumps(dataclasses.asdict(prem), sort_keys=True)
 
 
-if "premissas" not in st.session_state:
+CAMPOS_PREMISSAS = {f.name for f in dataclasses.fields(Premissas)}
+salvas = st.session_state.get("premissas")
+# Premissas guardadas por uma versão antiga do app (campos diferentes) voltam ao padrão
+if salvas is None or set(dataclasses.asdict(salvas)) != CAMPOS_PREMISSAS:
     st.session_state.premissas = Premissas()
 prem: Premissas = st.session_state.premissas
 
 try:
     with st.spinner("⏳ Calculando a melhor agenda do dia… isso pode levar até 20 segundos."):
-        R = calcular(para_json(prem))
+        R = calcular(para_json(prem), versao_do_codigo())
 except Exception as erro:  # mensagem clara em vez de erro técnico
     st.error("❌ Não foi possível montar o dia com estas premissas. Confira os valores na aba "
              "**Premissas** (por exemplo: número de pacientes e porcentagens por tipo de "

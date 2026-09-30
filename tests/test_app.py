@@ -55,3 +55,20 @@ def test_premissas_sexta_feira_e_folga():
     assert not at.exception
     prem = at.session_state["premissas"]
     assert prem.sexta_feira and prem.folga_limite == 45
+
+
+def test_premissas_de_versao_antiga_na_sessao():
+    """Depois de um deploy, a sessão pode trazer premissas com campos antigos."""
+    import dataclasses
+
+    @dataclasses.dataclass
+    class PremissasAntigas:
+        n_pacientes: int = 90
+        frac_pre_liberada: float = 0.6  # campo que não existe mais
+
+    at = AppTest.from_file(APP, default_timeout=90)
+    at.session_state["premissas"] = PremissasAntigas()
+    at.run()
+    assert not at.exception, at.exception
+    assert not at.error
+    assert hasattr(at.session_state["premissas"], "folga_limite")
