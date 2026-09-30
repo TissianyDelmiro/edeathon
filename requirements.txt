@@ -1,0 +1,7 @@
+streamlit==1.64.0
+ortools==9.15.6755
+pandas==3.0.6
+numpy==2.5.3
+plotly==7.1.0
+# apenas para rodar os testes
+pytest==9.1.1
