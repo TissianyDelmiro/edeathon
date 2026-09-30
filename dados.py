@@ -1,11 +1,15 @@
 ﻿"""
-Premissas do protótipo e gerador do dia sintético.
+Premissas do protótipo, tabela de protocolos e gerador do dia sintético.
 
 REGRAS DO EVENTO:
 - Nenhum dado real de paciente: todos os pacientes são fictícios (PAC-001, PAC-002...).
-- Nenhuma decisão clínica: as durações de preparo e de infusão de cada perfil são
+- Nenhuma decisão clínica: as durações de preparo e de infusão de cada grupo são
   PARÂMETROS DE ENTRADA informados pelo hospital. O sistema só as lê, nunca as calcula
   nem as altera.
+
+A tabela data/horarios_limite.csv vem da folha fixada na unidade de QT (dado do setor,
+não de paciente): para cada protocolo, o horário limite para o paciente estar na triagem
+com o farmacêutico e a cor que classifica o tempo de infusão.
 
 Todos os horários são guardados em minutos desde a meia-noite (ex.: 7h00 = 420).
 """
@@ -13,27 +17,70 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-# Ordem fixa dos perfis de infusão (usada em tabelas, cores e gráficos)
-PERFIS = ["A (curto)", "Suporte", "Médio", "Longo"]
+ARQUIVO_PROTOCOLOS = Path(__file__).resolve().parent / "data" / "horarios_limite.csv"
+
+# Grupos de tratamento, definidos pela cor da folha do setor (ordem fixa em tabelas e gráficos)
+PERFIS = ["Longo", "Intermediário laranja", "Intermediário marrom", "Rápido", "Injetável"]
+GRUPO_DA_COR = {
+    "vermelho": "Longo",
+    "laranja": "Intermediário laranja",
+    "marrom": "Intermediário marrom",
+    "verde": "Rápido",
+    "azul": "Injetável",
+}
+# Laranja e marrom ainda não confirmados como o mesmo nível pelo setor
+A_CONFIRMAR = {"Intermediário laranja", "Intermediário marrom"}
+# Nome com a cor escrita junto (nunca só a cor)
+ROTULO = {
+    "Longo": "🔴 Longo (vermelho)",
+    "Intermediário laranja": "🟠 Intermediário laranja (a confirmar)",
+    "Intermediário marrom": "🟤 Intermediário marrom (a confirmar)",
+    "Rápido": "🟢 Rápido (verde)",
+    "Injetável": "🔵 Injetável (azul)",
+}
+
+MINUTOS_SEXTA = 60  # às sextas, todos os horários limite têm 1h a menos
 
 
 def perfis_padrao() -> dict:
-    """Valores padrão por perfil. TODOS são 'suposição a validar' com o hospital.
+    """Valores padrão por grupo. TODOS são 'suposição a validar' com o hospital.
 
     preparo  = minutos de manipulação da bolsa na capela
-    infusao  = minutos de infusão (informado pelo hospital; A=51, suporte=15, médio=120, longo=240)
-    mix      = fração dos pacientes do dia com este perfil
+    infusao  = minutos de infusão (Longo=240, Intermediário=120, Rápido=51, Injetável=15)
+    mix      = fração dos pacientes do dia neste grupo
     """
     return {
-        "A (curto)": {"preparo": 9, "infusao": 51, "mix": 0.35},
-        "Suporte": {"preparo": 6, "infusao": 15, "mix": 0.20},
-        "Médio": {"preparo": 12, "infusao": 120, "mix": 0.30},
         "Longo": {"preparo": 15, "infusao": 240, "mix": 0.15},
+        "Intermediário laranja": {"preparo": 12, "infusao": 120, "mix": 0.15},
+        "Intermediário marrom": {"preparo": 12, "infusao": 120, "mix": 0.15},
+        "Rápido": {"preparo": 9, "infusao": 51, "mix": 0.35},
+        "Injetável": {"preparo": 6, "infusao": 15, "mix": 0.20},
     }
+
+
+def _hhmm_para_min(texto: str) -> int:
+    h, m = texto.strip().split(":")
+    return int(h) * 60 + int(m)
+
+
+@lru_cache(maxsize=1)
+def carregar_protocolos() -> pd.DataFrame:
+    """Lê a tabela de horários limite do setor e acrescenta o grupo e o limite em minutos."""
+    if not ARQUIVO_PROTOCOLOS.exists():
+        raise FileNotFoundError(f"Tabela de horários limite não encontrada: {ARQUIVO_PROTOCOLOS}")
+    tab = pd.read_csv(ARQUIVO_PROTOCOLOS, encoding="utf-8")
+    cores_invalidas = set(tab["cor"]) - set(GRUPO_DA_COR)
+    if cores_invalidas:
+        raise ValueError(f"Cor desconhecida na tabela de horários limite: {cores_invalidas}")
+    tab["grupo"] = tab["cor"].map(GRUPO_DA_COR)
+    tab["limite_min"] = tab["horario_limite"].map(_hhmm_para_min)
+    return tab
 
 
 @dataclass
@@ -50,6 +97,9 @@ class Premissas:
     n_pacientes: int = 90
     perfis: dict = field(default_factory=perfis_padrao)
     frac_antes_10h: float = 0.57  # fração de pacientes que chega antes das 10h hoje
+    # Horário limite (folha do setor)
+    sexta_feira: bool = False  # às sextas, todos os limites ficam 1h mais cedo
+    folga_limite: int = 30  # proposta: chegar à triagem pelo menos X min antes do limite
     # Tempos de processo (minutos)
     alta_atual: int = 15  # do fim da infusão até liberar a poltrona no Tasy (hoje)
     alta_antecipada: int = 5  # idem, com a alta preparada antes do fim da infusão
@@ -90,9 +140,19 @@ def gerar_dia(prem: Premissas) -> pd.DataFrame:
     if n <= 0:
         raise ValueError("O número de pacientes precisa ser maior que zero.")
 
-    # 1) Perfil de cada paciente, respeitando o mix
+    # 1) Grupo de cada paciente, respeitando o mix; dentro do grupo, um protocolo da
+    #    tabela do setor sorteado com a mesma chance para todos (suposição)
     contagem = _contagem_por_perfil(n, prem.perfis)
     perfis = [nome for nome in PERFIS if nome in contagem for _ in range(contagem[nome])]
+    tab = carregar_protocolos()
+    protocolos, limites = [], []
+    for grupo in perfis:
+        opcoes = tab[tab["grupo"] == grupo]
+        if opcoes.empty:
+            raise ValueError(f"Nenhum protocolo do grupo '{grupo}' na tabela de horários limite.")
+        linha = opcoes.iloc[rng.integers(len(opcoes))]
+        protocolos.append(linha["protocolo"])
+        limites.append(linha["limite_min"] - (MINUTOS_SEXTA if prem.sexta_feira else 0))
 
     # 2) Quem chega antes das 10h (57% hoje). Pacientes do perfil longo chegam de manhã,
     #    como na prática, para caber a infusão no turno.
@@ -118,7 +178,9 @@ def gerar_dia(prem: Premissas) -> pd.DataFrame:
     chegadas = np.floor(chegadas)
 
     df = pd.DataFrame({
-        "perfil": perfis,
+        "perfil": perfis,  # grupo de tratamento (cor da folha do setor)
+        "protocolo": protocolos,
+        "limite_min": limites,  # horário limite para chegar à triagem com o farmacêutico
         "chegada_min": chegadas.astype(int),
         "u_pre": rng.random(n),
         "u_antecedencia": rng.random(n),
@@ -131,8 +193,8 @@ def gerar_dia(prem: Premissas) -> pd.DataFrame:
     # 3) IDs fictícios em ordem de chegada
     df = df.sort_values(["chegada_min", "perfil"], kind="stable").reset_index(drop=True)
     df.insert(0, "paciente", [f"PAC-{i + 1:03d}" for i in range(n)])
-    return df[["paciente", "perfil", "preparo_min", "infusao_min", "chegada_min",
-               "u_pre", "u_antecedencia", "z_atraso"]]
+    return df[["paciente", "perfil", "protocolo", "limite_min", "preparo_min", "infusao_min",
+               "chegada_min", "u_pre", "u_antecedencia", "z_atraso"]]
 
 
 def hhmm(minutos) -> str:

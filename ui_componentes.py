@@ -22,12 +22,13 @@ TEXTO = "#102a33"  # texto principal (contraste > 13:1 no branco)
 TEXTO_2 = "#3d5560"  # texto secundário (contraste > 7:1 no branco)
 BORDA = "#d5dfe5"
 
-# Cores dos perfis (paleta categórica validada para daltonismo; ordem fixa)
+# Cores dos grupos, iguais às da folha do setor (sempre com o nome escrito junto)
 CORES_PERFIL = {
-    "A (curto)": "#2a78d6",
-    "Suporte": "#eb6834",
-    "Médio": "#1baf7a",
-    "Longo": "#eda100",
+    "Longo": "#c62828",
+    "Intermediário laranja": "#ef6c00",
+    "Intermediário marrom": "#6d4c41",
+    "Rápido": "#2e7d32",
+    "Injetável": "#1565c0",
 }
 # Cores dos cenários nos gráficos (mesma ordem fixa da paleta)
 COR_HOJE, COR_PROPOSTA = "#2a78d6", "#eb6834"

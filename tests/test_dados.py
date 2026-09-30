@@ -1,5 +1,6 @@
 """Testes da Fase 1: premissas e gerador do dia sintético."""
-from dados import PERFIS, Premissas, gerar_dia, hhmm
+from dados import (A_CONFIRMAR, GRUPO_DA_COR, MINUTOS_SEXTA, PERFIS, Premissas,
+                   carregar_protocolos, gerar_dia, hhmm)
 
 
 def test_quantidade_e_ids_ficticios():
@@ -35,9 +36,9 @@ def test_chegadas_dentro_do_turno():
 
 def test_duracoes_vem_das_premissas_sem_alteracao():
     prem = Premissas()
-    prem.perfis["Médio"]["infusao"] = 133  # valor informado pelo hospital
+    prem.perfis["Intermediário marrom"]["infusao"] = 133  # valor informado pelo hospital
     df = gerar_dia(prem)
-    assert (df.loc[df["perfil"] == "Médio", "infusao_min"] == 133).all()
+    assert (df.loc[df["perfil"] == "Intermediário marrom", "infusao_min"] == 133).all()
 
 
 def test_mesma_semente_mesmo_dia():
@@ -50,3 +51,33 @@ def test_mesma_semente_mesmo_dia():
 def test_hhmm():
     assert hhmm(545) == "09h05"
     assert hhmm(None) == "—"
+
+
+def test_tabela_de_protocolos_do_setor():
+    tab = carregar_protocolos()
+    assert len(tab) == 34
+    assert tab["protocolo"].is_unique
+    assert set(tab["cor"]) == set(GRUPO_DA_COR)
+    # Exemplos conferidos com a folha do setor
+    lim = tab.set_index("protocolo")
+    assert lim.loc["TIP Alternativo", "limite_min"] == 11 * 60
+    assert lim.loc["Herceptin + Perjeta (1ª vez)", "limite_min"] == 14 * 60 + 30
+    assert lim.loc["Faslodex/Eligard/Filgrastin", "grupo"] == "Injetável"
+    assert lim.loc["Irinotecano", "grupo"] == "Intermediário marrom"
+    assert lim.loc["CAPOX ou XELOX", "grupo"] == "Intermediário laranja"
+    assert (tab.loc[tab["cor"] == "vermelho", "grupo"] == "Longo").all()
+    assert A_CONFIRMAR == {"Intermediário laranja", "Intermediário marrom"}
+
+
+def test_paciente_recebe_protocolo_do_proprio_grupo():
+    df = gerar_dia(Premissas())
+    tab = carregar_protocolos().set_index("protocolo")
+    assert (tab.loc[df["protocolo"], "grupo"].to_numpy() == df["perfil"].to_numpy()).all()
+    assert (tab.loc[df["protocolo"], "limite_min"].to_numpy() == df["limite_min"].to_numpy()).all()
+
+
+def test_sexta_feira_uma_hora_a_menos():
+    normal = gerar_dia(Premissas())
+    sexta = gerar_dia(Premissas(sexta_feira=True))
+    assert (normal["protocolo"] == sexta["protocolo"]).all()
+    assert ((normal["limite_min"] - sexta["limite_min"]) == MINUTOS_SEXTA).all()

@@ -1,0 +1,35 @@
+protocolo,horario_limite,cor
+Paclitaxel + Cisplatina,12:00,vermelho
+TIP Alternativo,11:00,vermelho
+Paclitaxel + Carboplatina (21 dias),13:00,vermelho
+Paclitaxel + Carboplatina (Semanal),15:00,laranja
+Rituximabe (1ª vez),13:00,vermelho
+Rituximabe + Ifo/Mesna + Doxo + Vin,14:00,marrom
+Ifo/Mesna + Doxo + Vin,15:30,verde
+R-CHOP (1ª vez),12:00,vermelho
+R-CHOP (Concomitante),14:00,vermelho
+CHOP,16:00,verde
+ABDV,15:00,verde
+Carboplatina + Gemzar,16:00,verde
+Cisplatina + Gemzar,14:00,marrom
+Cisplatina (21 dias),15:00,vermelho
+Cisplatina (Semanal),16:00,marrom
+Docetaxel/Paclitaxel + Gemzar,16:00,marrom
+Docetaxel ou Paclitaxel,17:00,verde
+Dacarbazina,16:30,verde
+FLOX c/ Oxaliplatina,15:30,laranja
+CAPOX ou XELOX,16:00,laranja
+Irinotecano,16:00,marrom
+Herceptin + Perjeta (1ª vez),14:30,vermelho
+Herceptin + Perjeta,16:00,verde
+Doxorrubicina + Ciclofosfamida,17:00,verde
+Vinorelbine,18:00,verde
+Folinato + 5FU,18:00,verde
+Herceptin ou Perjeta,17:00,verde
+Kadcyla ou Herceptin (1ª vez),16:00,verde
+Kadcyla,17:00,verde
+Gemzar Intravesical,17:00,verde
+Gemzar,17:30,verde
+Ácido Zoledrônico,18:00,verde
+Faslodex/Eligard/Filgrastin,18:00,azul
+Cisplatina + Citarabina,12:00,vermelho
