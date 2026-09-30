@@ -1,5 +1,6 @@
 """Testes da Fase 4: indicadores conferidos com um caso pequeno feito à mão."""
 import pandas as pd
+import numpy as np
 import pytest
 
 from dados import Premissas
@@ -67,11 +68,35 @@ def test_series_por_hora(caso):
 
 
 def test_tabela_comparativa():
-    base = dict(horas_qt=100, horas_sem_tratamento=50, t2_mediana=10, t2_p90=60,
-                pct_espera_30=20, pico_simultaneos=40, capela_manha=90, capela_tarde=30)
-    melhor = dict(base, horas_qt=110, horas_sem_tratamento=25)
+    base = dict(remarcados=2, pacientes_atendidos=88, horas_qt=100, horas_sem_tratamento=50,
+                t2_mediana=10, t2_p90=60, pct_espera_30=20, pico_simultaneos=40,
+                capela_manha=90, capela_tarde=30)
+    melhor = dict(base, remarcados=0, pacientes_atendidos=90, horas_qt=110,
+                  horas_sem_tratamento=25)
     t = tabela_comparativa(base, melhor).set_index("Indicador")
-    assert t.iloc[0]["Variação (%)"] == pytest.approx(10)
-    assert t.iloc[0]["Resultado"].startswith("✅")
-    assert t.iloc[1]["Variação (%)"] == pytest.approx(-50)
-    assert t.iloc[1]["Resultado"].startswith("✅")
+    rem = t.loc["Pacientes remarcados por perder o horário limite"]
+    assert rem["Variação (%)"] == pytest.approx(-100)
+    assert rem["Resultado"].startswith("✅")
+    assert t.loc["Pacientes atendidos no dia", "Resultado"].startswith("✅")
+    qt = t.loc["Horas de quimioterapia no turno"]
+    assert qt["Variação (%)"] == pytest.approx(10)
+    assert qt["Resultado"].startswith("✅")
+    sem = t.loc["Horas de poltrona sem tratamento (espera + alta)"]
+    assert sem["Variação (%)"] == pytest.approx(-50)
+    assert sem["Resultado"].startswith("✅")
+    # Partindo de zero remarcações, qualquer remarcação na proposta é piora
+    pior = tabela_comparativa(dict(base, remarcados=0), dict(base, remarcados=1))
+    assert pior.set_index("Indicador").loc[rem.name, "Resultado"].startswith("⚠️")
+
+
+def test_contagem_de_remarcados(caso):
+    prem, ag = caso
+    ag = ag.copy()
+    # PAC-003 chegou às 13h00 com limite às 12h00: remarcado, sem capela nem poltrona
+    ag.loc[2, "limite_min"] = 12 * 60
+    ag.loc[2, "remarcado"] = True
+    ag.loc[2, ["senta", "inicio_preparo", "fim_preparo", "inicio_infusao",
+               "fim_infusao", "sai"]] = np.nan
+    k = calcular_kpis(ag, prem, prem.alta_atual)
+    assert k["remarcados"] == 1
+    assert k["pacientes_atendidos"] == 2

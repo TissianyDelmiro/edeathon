@@ -153,6 +153,16 @@ CSS = f"""
   border-radius: 12px; padding: 12px 16px; margin: 8px 0; font-size: 20px; font-weight: 600; color: {TEXTO};
 }}
 
+/* ---------- Destaque de remarcações ---------- */
+.rem {{ display: flex; align-items: stretch; gap: 14px; flex-wrap: wrap; }}
+.rem-lado {{ flex: 1 1 240px; background: var(--tinta); border: 3px solid var(--cor);
+            border-radius: 14px; padding: 14px 18px; color: {TEXTO}; }}
+.rem-titulo {{ font-size: 20px; font-weight: 800; color: {TEXTO_2}; text-transform: uppercase; }}
+.rem-num {{ font-size: 56px; font-weight: 900; line-height: 1.1; }}
+.rem-texto {{ font-size: 20px; font-weight: 600; }}
+.rem-seta {{ align-self: center; font-size: 40px; color: {PETROLEO}; }}
+.rem-nota {{ margin-top: 12px; font-size: 19px; color: {TEXTO}; }}
+
 /* ---------- Tabelas ---------- */
 .tabela-grande {{ width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid {BORDA};
                  border-radius: 12px; overflow: hidden; }}
@@ -250,6 +260,27 @@ def caixa_alerta(tipo: str, texto: str):
         icone, cor, tinta = "🔔", *SITUACAO_POLTRONA[P.ALTA][2:]
     st.markdown(f'<div class="alerta" style="--cor:{cor};--tinta:{tinta}" role="alert">'
                 f'{icone} {html.escape(texto)}</div>', unsafe_allow_html=True)
+
+
+def destaque_remarcacoes(hoje: int, proposta: int, atend_hoje: int, atend_prop: int,
+                         folga: int):
+    """Cartão grande: remarcados hoje -> na proposta (número + ícone + texto)."""
+    def lado(titulo, n, atend, cor, tinta, icone):
+        texto = "paciente remarcado" if n == 1 else "pacientes remarcados"
+        return (f'<div class="rem-lado" style="--cor:{cor};--tinta:{tinta}">'
+                f'<div class="rem-titulo">{titulo}</div>'
+                f'<div class="rem-num">{icone} {n}</div>'
+                f'<div class="rem-texto">{texto}<br>{atend} atendidos no dia</div></div>')
+    cor_hoje = ESPERA_LONGA[2:] if hoje else SITUACAO_POLTRONA[P.LIVRE][2:]
+    cor_prop = ESPERA_LONGA[2:] if proposta else SITUACAO_POLTRONA[P.LIVRE][2:]
+    st.markdown(
+        '<div class="rem">'
+        + lado("Hoje", hoje, atend_hoje, *cor_hoje, "❌" if hoje else "✅")
+        + '<div class="rem-seta" aria-hidden="true">➜</div>'
+        + lado("Proposta", proposta, atend_prop, *cor_prop, "❌" if proposta else "✅")
+        + f'</div><div class="rem-nota">Na proposta, todo paciente chega à triagem pelo menos '
+          f'<b>{folga} min</b> antes do horário limite do protocolo.</div>',
+        unsafe_allow_html=True)
 
 
 def tabela(df: pd.DataFrame):

@@ -81,3 +81,12 @@ def test_sexta_feira_uma_hora_a_menos():
     sexta = gerar_dia(Premissas(sexta_feira=True))
     assert (normal["protocolo"] == sexta["protocolo"]).all()
     assert ((normal["limite_min"] - sexta["limite_min"]) == MINUTOS_SEXTA).all()
+
+
+def test_ordem_das_premissas_nao_muda_o_dia():
+    """O app salva as premissas em JSON (chaves reordenadas): o dia gerado deve ser o mesmo."""
+    import dataclasses
+    import json
+    prem = Premissas()
+    ida_e_volta = Premissas(**json.loads(json.dumps(dataclasses.asdict(prem), sort_keys=True)))
+    assert gerar_dia(prem).equals(gerar_dia(ida_e_volta))

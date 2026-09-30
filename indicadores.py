@@ -86,6 +86,8 @@ def calcular_kpis(ag: pd.DataFrame, prem: Premissas, alta: int) -> dict:
 
 # (chave, nome na tela, unidade, "maior é melhor?")
 INDICADORES = [
+    ("remarcados", "Pacientes remarcados por perder o horário limite", "pacientes", False),
+    ("pacientes_atendidos", "Pacientes atendidos no dia", "pacientes", True),
     ("horas_qt", "Horas de quimioterapia no turno", "h", True),
     ("horas_sem_tratamento", "Horas de poltrona sem tratamento (espera + alta)", "h", False),
     ("t2_mediana", "Espera na poltrona – metade dos pacientes espera até", "min", False),
@@ -103,7 +105,10 @@ def tabela_comparativa(k_atual: dict, k_otim: dict) -> pd.DataFrame:
     for chave, nome, unid, maior_melhor in INDICADORES:
         a, o = k_atual[chave], k_otim[chave]
         var = (o - a) / a * 100 if a else np.nan
-        if maior_melhor is None or np.isnan(var) or abs(var) < 0.5:
+        if maior_melhor is not None and not a and o:
+            # Partindo de zero não há variação em %: avalia pela diferença
+            avaliacao = "✅ Melhora" if maior_melhor else "⚠️ Piora"
+        elif maior_melhor is None or np.isnan(var) or abs(var) < 0.5:
             avaliacao = "➖ Equilíbrio" if maior_melhor is None else "➖ Igual"
         elif (var > 0) == maior_melhor:
             avaliacao = "✅ Melhora"

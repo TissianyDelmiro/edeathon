@@ -133,7 +133,10 @@ class Premissas:
 def _contagem_por_perfil(n: int, perfis: dict) -> dict:
     """Divide n pacientes entre os perfis respeitando o mix (método do maior resto)."""
     soma = sum(p["mix"] for p in perfis.values()) or 1.0
-    cotas = {nome: n * p["mix"] / soma for nome, p in perfis.items()}
+    # Ordem fixa dos grupos: o desempate não pode depender da ordem do dicionário
+    # (o app salva as premissas em JSON, que reordena as chaves)
+    ordem = [p for p in PERFIS if p in perfis] + [p for p in perfis if p not in PERFIS]
+    cotas = {nome: n * perfis[nome]["mix"] / soma for nome in ordem}
     contagem = {nome: int(np.floor(c)) for nome, c in cotas.items()}
     faltam = n - sum(contagem.values())
     for nome in sorted(cotas, key=lambda k: cotas[k] - contagem[k], reverse=True)[:faltam]:

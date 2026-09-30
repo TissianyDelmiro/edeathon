@@ -36,3 +36,11 @@ def test_erro_de_mix_em_portugues():
     at.number_input[0].set_value(50)  # total de pacientes
     at.button[0].click().run()  # botão do formulário
     assert not at.exception
+
+
+def test_destaque_de_remarcacoes_na_comparacao():
+    at = _rodar()
+    textos = " ".join(m.value for m in at.markdown)
+    assert "Pacientes remarcados por perder o horário limite" in textos
+    assert "pacientes remarcados" in textos  # cartão de destaque (hoje: 2)
+    assert "0 paciente" in textos or "✅ 0" in textos  # proposta: zero

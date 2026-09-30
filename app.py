@@ -23,7 +23,7 @@ import streamlit as st
 import indicadores as I
 import painel as P
 import ui_componentes as ui
-from dados import PERFIS, Premissas, gerar_dia, hhmm
+from dados import PERFIS, ROTULO, Premissas, gerar_dia, hhmm
 from otimizador import otimizar
 from simulacao_atual import simular_atual
 
@@ -203,6 +203,32 @@ with aba_comparar:
         st.info(texto_status)
 
         ka, ko = R["k_atual"], R["k_otim"]
+
+        # Destaque: remarcações por perder o horário limite
+        with ui.bloco("remarcacoes"):
+            ui.titulo_bloco("📅 Pacientes remarcados por perder o horário limite", (
+                "Pela folha do setor, cada protocolo tem um **horário limite** para o paciente "
+                "estar na triagem com o farmacêutico. Depois dele não dá mais para manipular a "
+                "bolsa no dia, e o paciente é **remarcado** para outro dia.\n\n"
+                "**Hoje**: quem chega depois do limite é remarcado.\n\n"
+                f"**Proposta**: a agenda marca a chegada pelo menos {prem.folga_limite} min "
+                "antes do limite de cada protocolo, para ninguém ser remarcado por prazo."
+                + ("\n\n**Sexta-feira**: todos os limites estão 1h mais cedo."
+                   if prem.sexta_feira else "")))
+            ui.destaque_remarcacoes(ka["remarcados"], ko["remarcados"],
+                                    ka["pacientes_atendidos"], ko["pacientes_atendidos"],
+                                    prem.folga_limite)
+            rem = R["atual"][R["atual"]["remarcado"]]
+            if len(rem):
+                with st.expander(f"Ver quem foi remarcado hoje ({len(rem)})"):
+                    ui.tabela(pd.DataFrame({
+                        "Paciente": rem["paciente"],
+                        "Protocolo": rem["protocolo"],
+                        "Tipo de tratamento": rem["perfil"].map(ROTULO),
+                        "Chegou à triagem": rem["chegada"].map(hhmm),
+                        "Horário limite": rem["limite_min"].map(hhmm),
+                    }))
+
         with ui.bloco("resultados"):
             ui.titulo_bloco("📊 Resultados: hoje x proposta", (
                 "**Hoje**: simulação do funcionamento atual – a maioria chega cedo, o paciente senta "
