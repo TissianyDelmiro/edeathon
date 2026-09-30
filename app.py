@@ -425,14 +425,23 @@ with aba_premissas:
         with st.expander("Ajustes avançados da simulação de hoje (calibração)"):
             st.markdown("Valores ajustados para a simulação reproduzir os números medidos no "
                         "hospital (espera mediana de 13 min, 21% acima de 30 min, 9% acima de 1h).")
-            c1, c2, c3, c4 = st.columns(4)
-            f_pre = c1.number_input("Prescrições liberadas antes da chegada (%)", 0, 100,
-                                    int(round(prem.frac_pre_liberada * 100)))
-            atr = c2.number_input("Atraso típico da liberação após a chegada (min)", 0.0, 120.0,
-                                  float(prem.atraso_liberacao_mediana))
-            disp = c3.number_input("Variação desse atraso", 0.0, 3.0,
+            tab_calib = pd.DataFrame({
+                "Tipo de tratamento": PERFIS,
+                "Prescrições liberadas antes da chegada (%)":
+                    [round(prem.calibracao[p]["pre"] * 100) for p in PERFIS],
+                "Atraso típico da liberação após a chegada (min)":
+                    [float(prem.calibracao[p]["atraso"]) for p in PERFIS],
+            })
+            calib_editada = st.data_editor(
+                tab_calib, hide_index=True, disabled=["Tipo de tratamento"], width="stretch",
+                column_config={
+                    tab_calib.columns[1]: st.column_config.NumberColumn(min_value=0, max_value=100),
+                    tab_calib.columns[2]: st.column_config.NumberColumn(min_value=0, max_value=120),
+                })
+            c1, c2 = st.columns(2)
+            disp = c1.number_input("Variação do atraso", 0.0, 3.0,
                                    float(prem.atraso_liberacao_dispersao), step=0.1)
-            sem = c4.number_input("Número do dia sintético (semente)", 0, 99999, prem.semente)
+            sem = c2.number_input("Número do dia sintético (semente)", 0, 99999, prem.semente)
 
         gerar = st.form_submit_button("▶️ Gerar dia sintético e calcular agenda", type="primary",
                                       width="stretch")
@@ -464,7 +473,10 @@ with aba_premissas:
                 capacidade_capela=int(cap_c), n_pacientes=int(n_pac), perfis=perfis,
                 frac_antes_10h=antes10 / 100, alta_atual=int(alta_h),
                 alta_antecipada=int(alta_a), transporte=int(transp), acomodacao=int(acom),
-                frac_pre_liberada=f_pre / 100, atraso_liberacao_mediana=float(atr),
+                calibracao={r["Tipo de tratamento"]: {
+                    "pre": float(r.iloc[1]) / 100, "atraso": float(r.iloc[2])}
+                    for _, r in calib_editada.iterrows()},
+                sexta_feira=prem.sexta_feira, folga_limite=prem.folga_limite,
                 atraso_liberacao_dispersao=float(disp), semente=int(sem))
             st.success("✅ Premissas salvas. Calculando o novo dia…")
             st.rerun()

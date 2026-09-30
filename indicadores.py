@@ -28,6 +28,10 @@ REAL = {
     "horas_sem_tratamento": 54.0,
     "pico_simultaneos": 49.0,
     "pct_antes_10h": 57.0,
+    # Painel de Indicadores do setor: espera média por tipo (Rápido = antigo perfil A,
+    # Injetável = antigo Suporte)
+    "espera_media_rapido": 43.0,
+    "espera_media_injetavel": 47.0,
 }
 
 
@@ -59,8 +63,12 @@ def calcular_kpis(ag: pd.DataFrame, prem: Premissas, alta: int) -> dict:
     cap = prem.capacidade_capela
     t_fim = int(max(fim, np.nanmax(ag["sai"]) if len(atend) else fim)) + 1
     na_unidade = _ocupacao_por_minuto(atend["chegada"], atend["sai"], ini, t_fim)
+    por_grupo = pd.Series(t2, index=atend.index).groupby(atend["perfil"]).mean()
     return {
         "pacientes_atendidos": len(atend),
+        "remarcados": int(ag["remarcado"].sum()),
+        "espera_media_rapido": float(por_grupo.get("Rápido", np.nan)),
+        "espera_media_injetavel": float(por_grupo.get("Injetável", np.nan)),
         "horas_qt": _sobreposicao(atend["inicio_infusao"], atend["fim_infusao"], ini, fim) / 60,
         "horas_sem_tratamento": (t2.sum() + alta * len(atend)) / 60,
         "t2_mediana": float(np.median(t2)) if len(t2) else 0.0,
@@ -116,6 +124,8 @@ def tabela_calibracao(k_atual: dict, pct_antes_10h: float) -> pd.DataFrame:
         "pct_espera_60": "Esperam mais de 1 hora (%)",
         "horas_sem_tratamento": "Horas de poltrona sem tratamento por dia",
         "pico_simultaneos": "Maior número de pacientes ao mesmo tempo",
+        "espera_media_rapido": "Espera média na poltrona – 🟢 Rápido (min)",
+        "espera_media_injetavel": "Espera média na poltrona – 🔵 Injetável (min)",
     }
     return pd.DataFrame([{"Número": nome, "Observado no hospital": REAL[k],
                           "Simulação de hoje": simulado[k]} for k, nome in nomes.items()])

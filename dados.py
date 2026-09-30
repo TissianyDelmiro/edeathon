@@ -46,6 +46,7 @@ ROTULO = {
 }
 
 MINUTOS_SEXTA = 60  # às sextas, todos os horários limite têm 1h a menos
+FIM_CHEGADAS_TARDE = 15 * 60 + 30  # últimas chegadas do dia hoje (suposição)
 
 
 def perfis_padrao() -> dict:
@@ -62,6 +63,18 @@ def perfis_padrao() -> dict:
         "Rápido": {"preparo": 9, "infusao": 51, "mix": 0.35},
         "Injetável": {"preparo": 6, "infusao": 15, "mix": 0.20},
     }
+
+
+def calibracao_padrao() -> dict:
+    """Liberação das prescrições no cenário atual, por grupo (resultado da calibração).
+
+    Grupos planejados (longo e intermediários) quase sempre têm a prescrição liberada antes
+    da chegada; nos curtos (rápido e injetável) a liberação costuma ocorrer depois, o que faz
+    esses pacientes esperarem mais na poltrona (como no Painel de Indicadores do setor).
+    """
+    curtos = {"Rápido", "Injetável"}
+    return {g: ({"pre": 0.20, "atraso": 10.0} if g in curtos else {"pre": 0.90, "atraso": 2.0})
+            for g in PERFIS}
 
 
 def _hhmm_para_min(texto: str) -> int:
@@ -105,12 +118,13 @@ class Premissas:
     alta_antecipada: int = 5  # idem, com a alta preparada antes do fim da infusão
     transporte: int = 5  # da capela até a poltrona
     acomodacao: int = 10  # no cenário otimizado: paciente senta 10 min antes da bolsa chegar
-    # Calibração do cenário atual (ajustada para reproduzir os números observados)
-    frac_pre_liberada: float = 0.60  # prescrições liberadas antes da chegada do paciente
-    atraso_liberacao_mediana: float = 4.0  # min entre chegada e liberação (demais pacientes)
-    atraso_liberacao_dispersao: float = 0.6  # espalhamento (log-normal) desse atraso
+    # Calibração do cenário atual (ajustada para reproduzir os números observados), por grupo:
+    #   pre    = fração das prescrições liberadas antes da chegada do paciente
+    #   atraso = mediana, em min, entre a chegada e a liberação (demais pacientes)
+    calibracao: dict = field(default_factory=calibracao_padrao)
+    atraso_liberacao_dispersao: float = 1.0  # espalhamento (log-normal) do atraso
     # Semente do gerador aleatório (mesma semente = mesmo dia)
-    semente: int = 125  # escolhida por gerar um dia típico (próximo dos números observados)
+    semente: int = 56  # escolhida por gerar um dia típico (próximo dos números observados)
 
     def copia(self) -> "Premissas":
         return copy.deepcopy(self)
@@ -154,15 +168,12 @@ def gerar_dia(prem: Premissas) -> pd.DataFrame:
         protocolos.append(linha["protocolo"])
         limites.append(linha["limite_min"] - (MINUTOS_SEXTA if prem.sexta_feira else 0))
 
-    # 2) Quem chega antes das 10h (57% hoje). Pacientes do perfil longo chegam de manhã,
-    #    como na prática, para caber a infusão no turno.
+    # 2) Quem chega antes das 10h (57% hoje), sorteado entre todos os grupos. O horário
+    #    de chegada de hoje não olha o horário limite: quem chega depois dele é remarcado.
     n_manha = int(round(prem.frac_antes_10h * n))
     idx = np.arange(n)
-    longos = [i for i in idx if perfis[i] == "Longo"]
-    outros = [i for i in idx if perfis[i] != "Longo"]
-    rng.shuffle(outros)
-    ordem = longos + outros
-    manha = set(ordem[:n_manha])
+    ordem = rng.permutation(n)
+    manha = set(ordem[:n_manha].tolist())
 
     dez_h = 10 * 60
     chegadas = np.empty(n)
@@ -171,10 +182,10 @@ def gerar_dia(prem: Premissas) -> pd.DataFrame:
             # Manhã: concentração logo na abertura (pico por volta das 8h)
             chegadas[i] = rng.triangular(prem.inicio_turno, prem.inicio_turno + 60, dez_h)
         else:
-            # Depois das 10h: chegadas decrescendo até o limite para caber a infusão
-            dur = prem.perfis[perfis[i]]["infusao"] + prem.perfis[perfis[i]]["preparo"]
-            limite = max(dez_h + 10, min(14 * 60 + 30, prem.fim_turno - dur - 60))
-            chegadas[i] = rng.triangular(dez_h, dez_h, limite)
+            # Depois das 10h: chegadas decrescendo até o fim da janela da tarde, iguais para
+            # todos os grupos (hoje o horário de chegada não considera o horário limite)
+            fim_janela = max(dez_h + 10, min(FIM_CHEGADAS_TARDE, prem.fim_turno - 60))
+            chegadas[i] = rng.triangular(dez_h, dez_h, fim_janela)
     chegadas = np.floor(chegadas)
 
     df = pd.DataFrame({

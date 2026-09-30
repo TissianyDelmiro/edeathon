@@ -17,7 +17,10 @@ def ag():
     df = pd.DataFrame(linhas, columns=["paciente", "chegada", "senta", "liberacao",
                                        "inicio_preparo", "fim_preparo", "bolsa_chega",
                                        "inicio_infusao", "fim_infusao", "sai", "poltrona"])
-    df["perfil"] = "A (curto)"
+    df["perfil"] = "Rápido"
+    df["protocolo"] = "Gemzar"
+    df["limite_min"] = 17 * 60 + 30
+    df["remarcado"] = False
     df["preparo_min"] = df["fim_preparo"] - df["inicio_preparo"]
     df["infusao_min"] = df["fim_infusao"] - df["inicio_infusao"]
     df["posto_capela"] = 1

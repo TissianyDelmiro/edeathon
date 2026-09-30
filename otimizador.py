@@ -168,7 +168,8 @@ def otimizar(dia: pd.DataFrame, prem: Premissas, limite_s: float = 20.0) -> dict
         return resultado
 
     # Montar a agenda a partir da solução
-    ag = dia[["paciente", "perfil", "preparo_min", "infusao_min"]].copy().reset_index(drop=True)
+    ag = dia[["paciente", "perfil", "protocolo", "limite_min", "preparo_min",
+              "infusao_min"]].copy().reset_index(drop=True)
     ok = np.array([solver.boolean_value(x) for x in presente])
     s_inf = np.array([solver.value(v) for v in inicio_inf], dtype=float)
     s_prep = np.array([solver.value(v) for v in inicio_prep], dtype=float)
@@ -185,6 +186,7 @@ def otimizar(dia: pd.DataFrame, prem: Premissas, limite_s: float = 20.0) -> dict
     tempos = ["inicio_infusao", "senta", "chegada", "inicio_preparo", "liberacao",
               "fim_preparo", "bolsa_chega", "fim_infusao", "sai"]
     ag.loc[~ok, tempos] = np.nan
+    ag["remarcado"] = ~ok  # quem não coube no dia precisaria ser remarcado
     ag["poltrona"] = _atribuir_recursos(ag["senta"], ag["sai"], prem.n_poltronas)
     ag["posto_capela"] = _atribuir_recursos(ag["inicio_preparo"], ag["fim_preparo"],
                                             prem.capacidade_capela)

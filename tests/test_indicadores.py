@@ -25,7 +25,10 @@ def caso():
     ]
     ag = pd.DataFrame(linhas, columns=["paciente", "chegada", "senta", "inicio_preparo",
                                        "fim_preparo", "inicio_infusao", "fim_infusao", "sai"])
-    ag["perfil"] = "A (curto)"
+    ag["perfil"] = "Rápido"
+    ag["protocolo"] = "Gemzar"
+    ag["limite_min"] = 17 * 60 + 30
+    ag["remarcado"] = False
     ag["preparo_min"] = 20
     ag["infusao_min"] = ag["fim_infusao"] - ag["inicio_infusao"]
     ag["liberacao"] = ag["inicio_preparo"]
