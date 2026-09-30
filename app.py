@@ -657,48 +657,68 @@ with aba_melhorou:
             st.plotly_chart(ui.estilo_grafico(fig, "Espera na poltrona x meta", altura=420),
                             width="stretch")
 
-        # 7) Ociosidade
+        # 7) Ociosidade (resumo simples; o detalhe hora a hora fica escondido)
         with ui.bloco("ociosidade"):
-            ui.titulo_bloco("💤 Ociosidade ao longo do dia", (
-                "Média de cada hora do turno:\n\n"
-                "- **Poltronas livres**: poltronas vazias. Na proposta sobram mais poltronas "
-                "porque cada paciente usa a poltrona por menos tempo: é **capacidade para "
-                "atender mais pacientes**.\n"
+            ui.titulo_bloco("💤 Ociosidade: poltronas e capela", (
                 "- **Poltronas ocupadas sem tratar**: o paciente está sentado, mas esperando a "
-                "bolsa ou a alta. É o desperdício **escondido**: quanto menor, melhor.\n"
-                "- **Capela parada**: % da capacidade da capela sem preparo. Hoje ela fica "
-                "sobrecarregada de manhã (0% parada) e quase parada à tarde; com o Sinfonia o "
-                "trabalho fica equilibrado."))
-            oc = pd.concat([
-                I.ociosidade_por_hora(atual, prem).assign(Cenário="Hoje"),
-                I.ociosidade_por_hora(otim_ag, prem).assign(Cenário="Com o Sinfonia"),
+                "bolsa ou a alta. É desperdício: **quanto menor, melhor**.\n"
+                "- **Poltronas livres**: poltronas vazias, prontas para mais pacientes. Com o "
+                "Sinfonia cada paciente usa a poltrona por menos tempo, então sobra mais.\n"
+                "- **Capela parada**: parte do tempo em que a capela não está preparando "
+                "bolsas. Hoje ela fica lotada de manhã e parada à tarde; com o Sinfonia o "
+                "trabalho fica igual o dia todo.\n\n"
+                "Os números são a **média por hora** do turno."))
+            oc_h = I.ociosidade_por_hora(atual, prem)
+            oc_p = I.ociosidade_por_hora(otim_ag, prem)
+            manha_h, manha_p = oc_h["hora"] < I.MEIO_DIA, oc_p["hora"] < I.MEIO_DIA
+
+            def num(v):
+                return f"{v:.0f}" if v >= 10 else f"{v:.1f}".replace(".", ",")
+
+            ui.cartoes_impacto([
+                ("🪑", f"{num(oc_h['poltronas_sem_tratar'].mean())} → "
+                       f"{num(oc_p['poltronas_sem_tratar'].mean())}",
+                 "poltronas ocupadas sem tratar",
+                 "em média, a cada hora (esperando bolsa ou alta)", "#b27600"),
+                ("✅", f"{num(oc_h['poltronas_ociosas'].mean())} → "
+                       f"{num(oc_p['poltronas_ociosas'].mean())}",
+                 "poltronas livres",
+                 "em média, a cada hora: espaço para mais pacientes", ui.TEAL),
+                ("🧪", f"{oc_h.loc[manha_h, 'capela_ociosa'].mean():.0f}% / "
+                       f"{oc_h.loc[~manha_h, 'capela_ociosa'].mean():.0f}%",
+                 "capela parada hoje (manhã / tarde)",
+                 f"com o Sinfonia: {oc_p.loc[manha_p, 'capela_ociosa'].mean():.0f}% / "
+                 f"{oc_p.loc[~manha_p, 'capela_ociosa'].mean():.0f}% (trabalho equilibrado)",
+                 ui.MARINHO),
             ])
-            oc["Hora"] = oc["hora"].map(lambda m: f"{m // 60}h")
-            paineis = [("poltronas_sem_tratar", "Poltronas ocupadas sem tratar", ""),
-                       ("poltronas_ociosas", "Poltronas livres", ""),
-                       ("capela_ociosa", "Capela parada", "%")]
-            fig = make_subplots(rows=1, cols=3, subplot_titles=[p[1] for p in paineis],
-                                horizontal_spacing=0.07)
-            for i, (col, _, suf) in enumerate(paineis, start=1):
-                for nome, cor in (("Hoje", ui.COR_HOJE), ("Com o Sinfonia", ui.COR_PROPOSTA)):
-                    d = oc[oc["Cenário"] == nome]
-                    fig.add_trace(go.Scatter(
-                        x=d["Hora"], y=d[col], name=nome, mode="lines+markers",
-                        line=dict(color=cor, width=3), marker=dict(size=9),
-                        legendgroup=nome, showlegend=(i == 1),
-                        hovertemplate="%{x}: %{y:.0f}" + suf + "<extra>" + nome + "</extra>"),
-                        row=1, col=i)
-                fig.update_yaxes(rangemode="tozero", ticksuffix=suf, row=1, col=i)
-            fig.update_annotations(font_size=19)
-            fig.update_xaxes(dtick=2)
-            ui.estilo_grafico(fig, "Ociosidade por hora", altura=470)
-            fig.update_layout(legend=dict(orientation="h", y=-0.18, x=0, yanchor="top"),
-                              margin=dict(t=50, b=90))
-            st.plotly_chart(fig, width="stretch")
-            sem_h = I.ociosidade_por_hora(atual, prem)["poltronas_sem_tratar"].mean()
-            sem_p = I.ociosidade_por_hora(otim_ag, prem)["poltronas_sem_tratar"].mean()
-            st.caption(f"Em média, **{sem_h:.1f} poltronas** ficam ocupadas sem tratamento "
-                       f"a cada hora hoje; com o Sinfonia, **{sem_p:.1f}**.")
+            st.caption("Leitura: **hoje → com o Sinfonia**.")
+
+            with st.expander("📈 Ver hora a hora"):
+                oc = pd.concat([oc_h.assign(Cenário="Hoje"),
+                                oc_p.assign(Cenário="Com o Sinfonia")])
+                oc["Hora"] = oc["hora"].map(lambda m: f"{m // 60}h")
+                paineis = [("poltronas_sem_tratar", "Poltronas ocupadas sem tratar", ""),
+                           ("poltronas_ociosas", "Poltronas livres", ""),
+                           ("capela_ociosa", "Capela parada", "%")]
+                fig = make_subplots(rows=1, cols=3, subplot_titles=[p[1] for p in paineis],
+                                    horizontal_spacing=0.07)
+                for i, (col, _, suf) in enumerate(paineis, start=1):
+                    for nome, cor in (("Hoje", ui.COR_HOJE),
+                                      ("Com o Sinfonia", ui.COR_PROPOSTA)):
+                        d = oc[oc["Cenário"] == nome]
+                        fig.add_trace(go.Scatter(
+                            x=d["Hora"], y=d[col], name=nome, mode="lines+markers",
+                            line=dict(color=cor, width=3), marker=dict(size=9),
+                            legendgroup=nome, showlegend=(i == 1),
+                            hovertemplate="%{x}: %{y:.0f}" + suf + "<extra>" + nome + "</extra>"),
+                            row=1, col=i)
+                    fig.update_yaxes(rangemode="tozero", ticksuffix=suf, row=1, col=i)
+                fig.update_annotations(font_size=19)
+                fig.update_xaxes(dtick=2)
+                ui.estilo_grafico(fig, "Ociosidade por hora", altura=470)
+                fig.update_layout(legend=dict(orientation="h", y=-0.18, x=0, yanchor="top"),
+                                  margin=dict(t=50, b=90))
+                st.plotly_chart(fig, width="stretch")
 
         # 8) Tabela completa
         with ui.bloco("tabela_ganhos"):
