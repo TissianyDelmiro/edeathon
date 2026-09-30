@@ -60,3 +60,39 @@ def test_fila_capela_sistema_puxado(ag):
     fila = P.fila_capela(ag, 505)
     assert fila["Paciente"].tolist() == ["PAC-002"]
     assert fila.iloc[0]["Poltrona libera"] == "08h45"
+
+
+def _com_limite(ag, paciente, limite, remarcado=False, chegada=None):
+    ag = ag.copy()
+    i = ag.index[ag["paciente"] == paciente][0]
+    ag.loc[i, "limite_min"] = limite
+    ag.loc[i, "remarcado"] = remarcado
+    if chegada is not None:
+        ag.loc[i, "chegada"] = chegada
+    return ag
+
+
+def test_alerta_perto_do_horario_limite(ag):
+    # PAC-002 chega às 8h50; limite às 9h00
+    ag2 = _com_limite(ag, "PAC-002", 9 * 60)
+    tipos = lambda t: [a["tipo"] for a in P.alertas(ag2, t)]
+    assert "limite" in tipos(8 * 60 + 40)  # faltam 20 min e ainda não chegou
+    assert "limite" not in tipos(8 * 60 + 20)  # faltam 40 min: ainda não é alerta
+    assert "limite" not in tipos(8 * 60 + 55)  # já chegou à triagem (8h50)
+    texto = next(a["texto"] for a in P.alertas(ag2, 8 * 60 + 40) if a["tipo"] == "limite")
+    assert "PAC-002" in texto and "09h00" in texto and "faltam 20 min" in texto
+
+
+def test_alerta_remarcado_depois_do_limite(ag):
+    # PAC-002 chegaria às 9h10 com limite às 9h00: remarcado
+    ag2 = _com_limite(ag, "PAC-002", 9 * 60, remarcado=True, chegada=9 * 60 + 10)
+    antes = [a["tipo"] for a in P.alertas(ag2, 8 * 60 + 55)]
+    depois = [a["tipo"] for a in P.alertas(ag2, 9 * 60 + 5)]
+    assert "limite" in antes and "remarcado" not in antes
+    assert "remarcado" in depois and "limite" not in depois
+
+
+def test_ordem_dos_alertas(ag):
+    ag2 = _com_limite(ag, "PAC-002", 9 * 60)
+    tipos = [a["tipo"] for a in P.alertas(ag2, 8 * 60 + 40)]
+    assert tipos == sorted(tipos, key=P.ORDEM_ALERTAS.get)

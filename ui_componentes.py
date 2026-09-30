@@ -13,6 +13,7 @@ import pandas as pd
 import streamlit as st
 
 import painel as P
+from dados import A_CONFIRMAR, ROTULO
 
 AVISO = "Protótipo com dados sintéticos. Não substitui decisão clínica nem o sistema Tasy."
 
@@ -22,26 +23,41 @@ TEXTO = "#102a33"  # texto principal (contraste > 13:1 no branco)
 TEXTO_2 = "#3d5560"  # texto secundário (contraste > 7:1 no branco)
 BORDA = "#d5dfe5"
 
-# Cores dos grupos, iguais às da folha do setor (sempre com o nome escrito junto)
+# Cores dos grupos, iguais às da folha do setor. Vermelho x verde se confundem para
+# daltônicos (validado: não há tom que resolva sem mudar as cores do setor), então a cor
+# NUNCA vai sozinha: sempre com o nome escrito, o emoji da cor e uma hachura por grupo.
 CORES_PERFIL = {
     "Longo": "#c62828",
     "Intermediário laranja": "#ef6c00",
-    "Intermediário marrom": "#6d4c41",
+    "Intermediário marrom": "#7a3e0e",
     "Rápido": "#2e7d32",
     "Injetável": "#1565c0",
 }
+# Hachura de cada grupo nos gráficos (segunda forma de identificar, além da cor)
+HACHURA_PERFIL = {
+    "Longo": "",
+    "Intermediário laranja": "/",
+    "Intermediário marrom": "x",
+    "Rápido": ".",
+    "Injetável": "\\",
+}
+# As mesmas cores e hachuras indexadas pelo nome completo (usado nas legendas)
+CORES_ROTULO = {ROTULO[g]: c for g, c in CORES_PERFIL.items()}
+HACHURA_ROTULO = {ROTULO[g]: h for g, h in HACHURA_PERFIL.items()}
 # Cores dos cenários nos gráficos (mesma ordem fixa da paleta)
 COR_HOJE, COR_PROPOSTA = "#2a78d6", "#eb6834"
 
 # Situação da poltrona: ícone, texto, cor forte (borda) e tinta clara (fundo do selo)
+# (cores diferentes das dos grupos para não confundir situação com tipo de tratamento)
 SITUACAO_POLTRONA = {
-    P.LIVRE: ("✅", "Livre", "#0a8a0a", "#e9f7e9"),
+    P.LIVRE: ("✅", "Livre", "#52606b", "#f1f4f6"),
     P.AGUARDANDO: ("⏳", "Aguardando bolsa", "#b27600", "#fff5dc"),
-    P.INFUSAO: ("💧", "Em infusão", "#1f6fcf", "#e6f0fc"),
+    P.INFUSAO: ("💧", "Em infusão", PETROLEO, "#e3f1f5"),
     P.ALTA: ("🚪", "Em alta", "#4a3aa7", "#efebff"),
 }
 ESPERA_LONGA = ("⚠️", "Espera longa", "#c62828", "#fdeaea")
 NEUTRO = ("#52606b", "#eef3f6")
+OK = ("#0a8a0a", "#e9f7e9")  # tudo certo (verde de status, sempre com ✅ e texto)
 
 ICONE_BOLSA = {
     "Prescrita": "📝", "Em preparo": "🧪", "Pronta": "📦",
@@ -146,6 +162,12 @@ CSS = f"""
   border-radius: 999px; padding: 2px 12px; margin: 6px 0; font-size: 19px; font-weight: 800;
 }}
 .poltrona .det {{ font-size: 18px; }}
+.grupo {{ display: inline-flex; align-items: flex-start; gap: 6px; font-size: 17px; font-weight: 700;
+          border: 1px solid {BORDA}; border-radius: 10px; padding: 2px 10px; margin: 2px 0;
+          background: #fff; line-height: 1.25; }}
+.grupo .bola {{ width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; margin-top: 3px;
+                border: 1px solid rgba(0, 0, 0, .25); }}
+.grupo .obs {{ display: block; font-size: 15px; font-weight: 600; color: {TEXTO_2}; }}
 
 /* ---------- Alertas ---------- */
 .alerta {{
@@ -222,6 +244,13 @@ def resumo(cartoes: list[str], empilhado: bool = False):
     st.markdown(f'<div class="{classe}">{"".join(cartoes)}</div>', unsafe_allow_html=True)
 
 
+def selo_grupo(grupo: str) -> str:
+    """Selo pequeno com a bolinha da cor e o nome do grupo escrito."""
+    obs = '<span class="obs">a confirmar</span>' if grupo in A_CONFIRMAR else ""
+    return (f'<span class="grupo"><span class="bola" style="background:{CORES_PERFIL[grupo]}" '
+            f'aria-hidden="true"></span><span>{html.escape(grupo)}{obs}</span></span>')
+
+
 def grade_poltronas(estado: pd.DataFrame, hhmm):
     """Mapa das poltronas: cada cartão tem cor + ícone + texto e a previsão de liberação."""
     cartoes = []
@@ -236,7 +265,7 @@ def grade_poltronas(estado: pd.DataFrame, hhmm):
         elif r["situacao"] == P.AGUARDANDO:
             detalhes.append(f"Esperando há {int(r['espera_min'])} min")
         if pd.notna(r["paciente"]):
-            detalhes.insert(0, f"<b>{r['paciente']}</b> · {r['perfil']}")
+            detalhes.insert(0, f"<b>{r['paciente']}</b><br>{selo_grupo(r['perfil'])}")
             detalhes.append(f"Libera às <b>{hhmm(r['libera_em'])}</b>")
         elif pd.notna(r["proximo"]):
             detalhes.append(f"Próximo: <b>{r['proximo']}</b> às {hhmm(r['proximo_em'])}")
@@ -254,8 +283,12 @@ def grade_poltronas(estado: pd.DataFrame, hhmm):
 def caixa_alerta(tipo: str, texto: str):
     if tipo == "espera":
         icone, cor, tinta = "⚠️", ESPERA_LONGA[2], ESPERA_LONGA[3]
+    elif tipo == "limite":
+        icone, cor, tinta = "⚠️", "#b27600", "#fff5dc"
+    elif tipo == "remarcado":
+        icone, cor, tinta = "❌", ESPERA_LONGA[2], ESPERA_LONGA[3]
     elif tipo == "ok":
-        icone, cor, tinta = "✅", *SITUACAO_POLTRONA[P.LIVRE][2:]
+        icone, cor, tinta = "✅", *OK
     else:
         icone, cor, tinta = "🔔", *SITUACAO_POLTRONA[P.ALTA][2:]
     st.markdown(f'<div class="alerta" style="--cor:{cor};--tinta:{tinta}" role="alert">'
@@ -271,8 +304,8 @@ def destaque_remarcacoes(hoje: int, proposta: int, atend_hoje: int, atend_prop: 
                 f'<div class="rem-titulo">{titulo}</div>'
                 f'<div class="rem-num">{icone} {n}</div>'
                 f'<div class="rem-texto">{texto}<br>{atend} atendidos no dia</div></div>')
-    cor_hoje = ESPERA_LONGA[2:] if hoje else SITUACAO_POLTRONA[P.LIVRE][2:]
-    cor_prop = ESPERA_LONGA[2:] if proposta else SITUACAO_POLTRONA[P.LIVRE][2:]
+    cor_hoje = ESPERA_LONGA[2:] if hoje else OK
+    cor_prop = ESPERA_LONGA[2:] if proposta else OK
     st.markdown(
         '<div class="rem">'
         + lado("Hoje", hoje, atend_hoje, *cor_hoje, "❌" if hoje else "✅")

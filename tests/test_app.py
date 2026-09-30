@@ -44,3 +44,14 @@ def test_destaque_de_remarcacoes_na_comparacao():
     assert "Pacientes remarcados por perder o horário limite" in textos
     assert "pacientes remarcados" in textos  # cartão de destaque (hoje: 2)
     assert "0 paciente" in textos or "✅ 0" in textos  # proposta: zero
+
+
+def test_premissas_sexta_feira_e_folga():
+    at = _rodar()
+    at.checkbox[0].check()
+    folga = next(n for n in at.number_input if n.label.startswith("Folga antes do horário limite"))
+    folga.set_value(45)
+    at.button[0].click().run()  # botão do formulário
+    assert not at.exception
+    prem = at.session_state["premissas"]
+    assert prem.sexta_feira and prem.folga_limite == 45

@@ -23,13 +23,15 @@ import streamlit as st
 import indicadores as I
 import painel as P
 import ui_componentes as ui
-from dados import PERFIS, ROTULO, Premissas, gerar_dia, hhmm
+from dados import (A_CONFIRMAR, GRUPO_DA_COR, PERFIS, ROTULO, Premissas, carregar_protocolos,
+                   gerar_dia, hhmm)
 from otimizador import otimizar
 from simulacao_atual import simular_atual
 
 st.set_page_config(page_title="Quimioterapia – Painel do dia", page_icon="💧", layout="wide")
 ui.aplicar_estilo()
 
+COR_DO_GRUPO = {g: c for c, g in GRUPO_DA_COR.items()}  # ex.: "Longo" -> "vermelho"
 DATA_BASE = datetime(2026, 1, 1)  # data fictícia usada só para desenhar os gráficos de horário
 
 
@@ -118,6 +120,10 @@ with aba_painel:
     if len(recepcao):
         cartoes.append(ui.cartao_resumo("🪑", "Na recepção sem poltrona", len(recepcao),
                                         *ui.ESPERA_LONGA[2:]))
+    remarcados_ate_agora = int((ag["remarcado"] & (ag["limite_min"] <= t)).sum())
+    if remarcados_ate_agora:
+        cartoes.append(ui.cartao_resumo("❌", "Remarcados (perderam o horário limite)",
+                                        remarcados_ate_agora, *ui.ESPERA_LONGA[2:]))
     ui.resumo(cartoes)
 
     # Alertas
@@ -125,6 +131,10 @@ with aba_painel:
         ui.titulo_bloco("🔔 Alertas agora", (
             "Avisos para a equipe no horário escolhido:\n\n"
             "- **⚠️ Espera acima de 30 min**: paciente sentado aguardando a bolsa há mais de meia hora.\n"
+            "- **⚠️ Perto do horário limite**: faltam menos de 30 min para o horário limite do "
+            "protocolo e o paciente ainda não chegou à triagem com o farmacêutico.\n"
+            "- **❌ Remarcado**: o paciente perdeu o horário limite. Não dá mais para manipular "
+            "a bolsa no dia e ele é remarcado para outro dia.\n"
             "- **🔔 Preparar alta**: faltam 15 minutos ou menos para acabar a infusão. "
             "Adiantar a alta libera a poltrona mais rápido."))
         lista = P.alertas(ag, t)
@@ -146,6 +156,9 @@ with aba_painel:
             "- 💧 **Em infusão** – medicação sendo aplicada\n"
             "- 🚪 **Em alta** – infusão terminou, aguardando a alta no sistema\n"
             "- ⚠️ **Espera longa** – aguardando a bolsa há mais de 30 minutos\n\n"
+            "O selo com a bolinha colorida mostra o **tipo de tratamento**, com as cores da "
+            "folha do setor: 🔴 Longo, 🟠 Intermediário laranja, 🟤 Intermediário marrom, "
+            "🟢 Rápido e 🔵 Injetável. O nome aparece sempre escrito junto.\n\n"
             "**Libera às** é a previsão de quando a poltrona fica livre."))
         ui.grade_poltronas(estado, hhmm)
 
@@ -181,7 +194,8 @@ with aba_painel:
                    for s in P.BOLSA_ETAPAS], empilhado=True)
         with st.expander("Ver a situação de cada bolsa"):
             ui.tabela(pd.DataFrame({
-                "Paciente": bolsas["paciente"], "Tipo de tratamento": bolsas["perfil"],
+                "Paciente": bolsas["paciente"],
+                "Tipo de tratamento": bolsas["perfil"].map(ROTULO),
                 "Poltrona": bolsas["poltrona"].astype("Int64"),
                 "Situação": [f"{ui.ICONE_BOLSA[s]} {s}" for s in bolsas["situacao"]],
                 "Início da infusão": bolsas["inicio_infusao"].map(hhmm),
@@ -321,11 +335,14 @@ with aba_agenda:
         st.warning("⚠️ Sem agenda organizada. Ajuste as premissas.")
     else:
         ag = R["otim"]["agenda"].dropna(subset=["inicio_infusao"]).copy()
-        ag["Tipo de tratamento"] = pd.Categorical(ag["perfil"], PERFIS)
+        ordem_rotulos = [ROTULO[p] for p in PERFIS]
+        ag["Tipo de tratamento"] = pd.Categorical(ag["perfil"].map(ROTULO), ordem_rotulos)
 
         tabela_agenda = pd.DataFrame({
             "Paciente": ag["paciente"],
-            "Tipo de tratamento": ag["perfil"],
+            "Protocolo": ag["protocolo"],
+            "Tipo de tratamento": ag["perfil"].map(ROTULO),
+            "Horário limite": ag["limite_min"].map(hhmm),
             "Chegada recomendada": ag["chegada"].map(hhmm),
             "Início do preparo": ag["inicio_preparo"].map(hhmm),
             "Início da infusão": ag["inicio_infusao"].map(hhmm),
@@ -336,29 +353,37 @@ with aba_agenda:
             c1, c2 = st.columns([3, 2], vertical_alignment="center")
             c1.markdown("Horários recomendados para cada paciente fictício. "
                         "As durações vêm das premissas informadas pelo hospital.")
+            # No CSV o grupo vai sem emoji, com a cor por extenso (abre melhor no Excel)
+            csv = tabela_agenda.assign(**{
+                "Tipo de tratamento": ag["perfil"].map(
+                    lambda g: g + (" (a confirmar)" if g in A_CONFIRMAR else "")).to_numpy(),
+                "Cor na folha do setor": ag["perfil"].map(COR_DO_GRUPO).to_numpy()})
             c2.download_button("⬇️ Baixar agenda (CSV)",
-                               tabela_agenda.to_csv(index=False, sep=";").encode("utf-8-sig"),
+                               csv.to_csv(index=False, sep=";").encode("utf-8-sig"),
                                file_name="agenda_otimizada.csv", mime="text/csv",
                                type="primary", width="stretch")
 
         with ui.bloco("gantt_poltronas"):
             ui.titulo_bloco("🪑 Agenda das poltronas", (
                 "Cada linha é uma poltrona e cada barra é um paciente, do momento em que senta até a "
-                "poltrona ser liberada (acomodação + infusão + alta). A cor indica o tipo de "
-                "tratamento; o código do paciente aparece na barra."))
+                "poltrona ser liberada (acomodação + infusão + alta). A cor e a hachura indicam "
+                "o tipo de tratamento (cores da folha do setor, com o nome na legenda); o código "
+                "do paciente aparece na barra."))
             ag["ini_dt"], ag["fim_dt"] = em_datetime(ag["senta"]), em_datetime(ag["sai"])
             ag["Poltrona"] = "Poltrona " + ag["poltrona"].astype(str).str.zfill(2)
             ag["Senta"], ag["Infusão"], ag["Sai"] = (ag["senta"].map(hhmm),
                                                      ag["inicio_infusao"].map(hhmm), ag["sai"].map(hhmm))
             fig = px.timeline(ag, x_start="ini_dt", x_end="fim_dt", y="Poltrona",
                               color="Tipo de tratamento", text="paciente",
-                              color_discrete_map=ui.CORES_PERFIL,
-                              category_orders={"Tipo de tratamento": PERFIS,
+                              pattern_shape="Tipo de tratamento",
+                              color_discrete_map=ui.CORES_ROTULO,
+                              pattern_shape_map=ui.HACHURA_ROTULO,
+                              category_orders={"Tipo de tratamento": ordem_rotulos,
                                                "Poltrona": sorted(ag["Poltrona"].unique())},
                               hover_data={"ini_dt": False, "fim_dt": False, "Poltrona": False,
                                           "Senta": True, "Infusão": True, "Sai": True})
             fig.update_traces(marker_line_color="white", marker_line_width=2,
-                              textfont=dict(size=12, color="#111111"), insidetextanchor="middle")
+                              textfont=dict(size=12, color="#ffffff"), insidetextanchor="middle")
             fig.update_yaxes(autorange="reversed", title=None)
             eixo_horas(fig)
             st.plotly_chart(ui.estilo_grafico(fig, "Poltronas ao longo do dia",
@@ -373,8 +398,10 @@ with aba_agenda:
             ag["Posto"] = "Posto " + ag["posto_capela"].astype(str)
             ag["Preparo"] = ag["inicio_preparo"].map(hhmm)
             fig = px.timeline(ag, x_start="pi_dt", x_end="pf_dt", y="Posto",
-                              color="Tipo de tratamento", color_discrete_map=ui.CORES_PERFIL,
-                              category_orders={"Tipo de tratamento": PERFIS},
+                              color="Tipo de tratamento", color_discrete_map=ui.CORES_ROTULO,
+                              pattern_shape="Tipo de tratamento",
+                              pattern_shape_map=ui.HACHURA_ROTULO,
+                              category_orders={"Tipo de tratamento": ordem_rotulos},
                               hover_data={"pi_dt": False, "pf_dt": False, "paciente": True,
                                           "Preparo": True, "Infusão": True})
             fig.update_traces(marker_line_color="white", marker_line_width=1)
@@ -386,6 +413,8 @@ with aba_agenda:
         with ui.bloco("tabela_agenda"):
             ui.titulo_bloco("📋 Tabela da agenda", (
                 "Lista de todos os pacientes fictícios com os horários recomendados. "
+                "A chegada recomendada fica sempre pelo menos "
+                f"{prem.folga_limite} min antes do horário limite do protocolo. "
                 "Use o botão **Baixar agenda** para abrir no Excel."))
             ui.tabela(tabela_agenda)
 
@@ -425,16 +454,40 @@ with aba_premissas:
             "Esses tempos são **informados pelo hospital**; o sistema só os usa para montar a agenda."))
         tab_perfis = pd.DataFrame({
             "Tipo de tratamento": PERFIS,
+            "Cor na folha": [ROTULO[p].split(" ")[0] + " " + COR_DO_GRUPO[p]
+                             + (" – a confirmar" if p in A_CONFIRMAR else "") for p in PERFIS],
             "Preparo (min)": [prem.perfis[p]["preparo"] for p in PERFIS],
             "Infusão (min)": [prem.perfis[p]["infusao"] for p in PERFIS],
             "Parte dos pacientes (%)": [round(prem.perfis[p]["mix"] * 100) for p in PERFIS],
         })
-        editado = st.data_editor(tab_perfis, hide_index=True, disabled=["Tipo de tratamento"],
+        editado = st.data_editor(tab_perfis, hide_index=True,
+                                 disabled=["Tipo de tratamento", "Cor na folha"],
                                  width="stretch", column_config={
                                      c: st.column_config.NumberColumn(min_value=1, max_value=600,
                                                                       step=1)
-                                     for c in tab_perfis.columns[1:]})
+                                     for c in tab_perfis.columns[2:]})
         st.caption(SUP)
+
+        ui.titulo_bloco("⏰ Horário limite dos protocolos", (
+            "Pela folha fixada na unidade, cada protocolo tem um **horário limite** para o "
+            "paciente estar na triagem com o farmacêutico. Depois dele o paciente é "
+            "**remarcado**.\n\n"
+            "**Sexta-feira**: todos os horários limite ficam 1h mais cedo "
+            "(encerramento do setor).\n\n"
+            "**Folga**: na proposta, a chegada é marcada pelo menos esses minutos antes do "
+            "limite."))
+        c1, c2 = st.columns(2)
+        sexta = c1.checkbox("📅 O dia é uma sexta-feira (limites 1h mais cedo)",
+                            value=prem.sexta_feira)
+        folga = c2.number_input(f"Folga antes do horário limite, em min ({SUP})", 0, 120,
+                                prem.folga_limite)
+        with st.expander("Ver a tabela de horários limite (folha do setor)"):
+            tab_lim = carregar_protocolos()
+            ui.tabela(pd.DataFrame({
+                "Protocolo": tab_lim["protocolo"],
+                "Horário limite": tab_lim["horario_limite"],
+                "Tipo de tratamento": tab_lim["grupo"].map(ROTULO),
+            }))
 
         ui.titulo_bloco("🚪 Alta e transporte", (
             "**Alta hoje**: minutos entre o fim da infusão e a liberação da poltrona no Tasy.\n\n"
@@ -484,7 +537,7 @@ with aba_premissas:
         ini_min, fim_min = ini_t.hour * 60 + ini_t.minute, fim_t.hour * 60 + fim_t.minute
         if fim_min - ini_min < 120:
             erros.append("O fim do turno precisa ser pelo menos 2 horas depois do início.")
-        if editado.iloc[:, 1:3].isna().any().any():
+        if editado[["Preparo (min)", "Infusão (min)"]].isna().any().any():
             erros.append("Preencha todos os tempos de preparo e de infusão.")
         if erros:
             for e in erros:
@@ -502,7 +555,7 @@ with aba_premissas:
                 calibracao={r["Tipo de tratamento"]: {
                     "pre": float(r.iloc[1]) / 100, "atraso": float(r.iloc[2])}
                     for _, r in calib_editada.iterrows()},
-                sexta_feira=prem.sexta_feira, folga_limite=prem.folga_limite,
+                sexta_feira=bool(sexta), folga_limite=int(folga),
                 atraso_liberacao_dispersao=float(disp), semente=int(sem))
             st.success("✅ Premissas salvas. Calculando o novo dia…")
             st.rerun()

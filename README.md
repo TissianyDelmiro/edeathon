@@ -24,8 +24,8 @@ Para rodar os testes: `python -m pytest tests`
 
 | Aba | Para quê |
 |---|---|
-| 🏥 **Painel do dia** (tela inicial) | Para tablet ou TV do setor. Arraste a "hora atual" e veja o mapa das poltronas, os alertas, a fila da farmácia e a situação das bolsas. |
-| 📊 **Hoje x Proposta** | Indicadores lado a lado com a variação em %, gráficos por hora e a comparação da simulação com os números reais. |
+| 🏥 **Painel do dia** (tela inicial) | Para tablet ou TV do setor. Arraste a "hora atual" e veja o mapa das poltronas, os alertas (inclusive perto do horário limite e remarcados), a fila da farmácia e a situação das bolsas. |
+| 📊 **Hoje x Proposta** | Remarcações em destaque, indicadores lado a lado com a variação em %, gráficos por hora e a comparação da simulação com os números reais. |
 | 📅 **Agenda do dia** | Gantt das poltronas e da capela, tabela de horários e exportação em CSV. |
 | ⚙️ **Premissas** | Edição de todos os valores de entrada e geração de um novo dia sintético. |
 
@@ -33,7 +33,8 @@ Para rodar os testes: `python -m pytest tests`
 
 | Arquivo | Conteúdo |
 |---|---|
-| `dados.py` | Premissas e gerador do dia sintético (PAC-001, PAC-002...) |
+| `dados.py` | Premissas, tabela de protocolos e gerador do dia sintético (PAC-001, PAC-002...) |
+| `data/horarios_limite.csv` | Horário limite e cor de cada protocolo (folha do setor) |
 | `simulacao_atual.py` | Simulação de eventos discretos do funcionamento atual (filas por ordem de chegada) |
 | `otimizador.py` | Modelo CP-SAT (OR-Tools) da agenda otimizada |
 | `indicadores.py` | Cálculo dos indicadores e das séries por hora |
@@ -51,36 +52,72 @@ Para rodar os testes: `python -m pytest tests`
 | Alta após o fim da infusão | 15 min hoje · 5 min com alta antecipada (proposta) |
 | Transporte da bolsa | 5 min |
 | Acomodação (proposta) | o paciente senta 10 min antes da bolsa chegar |
+| Folga antes do horário limite (proposta) | 30 min |
+| Sexta-feira | desmarcada (quando marcada, todos os limites ficam 1h mais cedo) |
 
-| Tipo de tratamento | Preparo (min) | Infusão (min) | Parte dos pacientes |
-|---|---|---|---|
-| A (curto) | 9 | 51 | 35% |
-| Suporte | 6 | 15 | 20% |
-| Médio | 12 | 120 | 30% |
-| Longo | 15 | 240 | 15% |
+### Tipos de tratamento (cores da folha do setor)
+
+| Tipo de tratamento | Cor na folha | Preparo (min) | Infusão (min) | Parte dos pacientes |
+|---|---|---|---|---|
+| Longo | 🔴 vermelho | 15 | 240 | 15% |
+| Intermediário laranja *(a confirmar)* | 🟠 laranja | 12 | 120 | 15% |
+| Intermediário marrom *(a confirmar)* | 🟤 marrom | 12 | 120 | 15% |
+| Rápido | 🟢 verde | 9 | 51 | 35% |
+| Injetável | 🔵 azul | 6 | 15 | 20% |
+
+- **Laranja e marrom:** ficam como grupos separados, com o mesmo tempo, até o setor
+  confirmar se são o mesmo nível.
+- **Mix e protocolo:** cada paciente sintético sorteia o grupo pelo mix. Dentro do grupo,
+  sorteia um protocolo da tabela do setor, com a mesma chance para todos.
+- **Acessibilidade das cores:** vermelho e verde se confundem para daltônicos. Por isso a
+  cor nunca aparece sozinha: o nome vai sempre escrito e cada grupo tem uma hachura
+  própria nos gráficos.
 
 **Regra do evento:** os tempos de preparo e de infusão são **parâmetros informados
 pelo hospital**. O sistema só os usa para agendar e nunca os calcula nem altera.
 Nenhuma decisão clínica é tomada.
 
+### Horário limite dos protocolos
+`data/horarios_limite.csv` reproduz a folha fixada na unidade de QT. É dado do setor, não
+de paciente. Para cada um dos 34 protocolos, a folha traz o **horário limite** para o
+paciente estar na triagem com o farmacêutico e a **cor** que classifica o tempo de
+infusão.
+
+- **Depois do limite:** não dá mais para manipular a bolsa no dia, e o paciente é
+  **remarcado** para outro dia.
+- **Às sextas-feiras:** todos os limites têm 1h a menos, por causa do encerramento do
+  setor.
+
 ### Cenário atual (simulação)
-- O paciente senta ao chegar; se não houver poltrona, espera na recepção.
-- A capela é uma fila única por ordem de liberação da prescrição.
-- 60% das prescrições já estão liberadas antes da chegada. As demais são liberadas
-  cerca de 4 min depois da chegada, com variação.
-- **Calibração.** Os tempos de preparo e a liberação das prescrições foram ajustados
-  para reproduzir os números medidos no hospital. No dia padrão (semente 125):
+- **Remarcação:** o paciente que chega à triagem depois do horário limite do protocolo é
+  remarcado. Ele não ocupa poltrona nem capela.
+- **Poltrona:** os demais sentam ao chegar. Se não houver poltrona livre, esperam na
+  recepção.
+- **Capela:** é uma fila única, na ordem em que as prescrições são liberadas.
+- **Liberação das prescrições (calibração por grupo):**
+  - nos grupos planejados (longo e intermediários), 90% das prescrições são liberadas
+    antes da chegada;
+  - nos curtos (rápido e injetável), só 20% são liberadas antes. As demais saem cerca de
+    10 min depois da chegada, com variação.
+- **Remarcações:** a quantidade é **estimada pela simulação**, porque não há dado real.
+- **Dia padrão (semente 56):**
 
 | Número | Real | Simulado |
 |---|---|---|
-| Espera na poltrona (mediana) | 13 min | 13 min |
-| Esperam mais de 30 min | 21% | 27% |
-| Esperam mais de 1h | 9% | 9% |
-| Horas de poltrona sem tratamento | ~54 h | 52 h |
-| Maior número de pacientes ao mesmo tempo | 49 | 42 |
+| Espera na poltrona (mediana) | 13 min | 12,6 min |
+| Esperam mais de 30 min | 21% | 24% |
+| Esperam mais de 1h | 9% | 10% |
+| Horas de poltrona sem tratamento | ~54 h | 54,8 h |
+| Maior número de pacientes ao mesmo tempo | 49 | 44 |
+| Espera média – Rápido | 43 min | 39 min |
+| Espera média – Injetável | 47 min | 28 min |
+| Remarcados por perder o horário limite | sem dado | 2 |
 
-O pico fica abaixo do real porque o protótipo usa 40 poltronas. Confirmar esse
-número com o hospital.
+- **Pico de pacientes:** fica abaixo do real porque o protótipo usa 40 poltronas.
+  Confirmar esse número com o hospital.
+- **Esperas por grupo:** as do Painel de Indicadores (43 e 47 min) não cabem junto com os
+  números gerais. Se Rápido e Injetável esperassem isso, as horas sem tratamento
+  passariam de 54 h. Confirmar se esses tempos incluem a espera na recepção.
 
 ### Proposta (CP-SAT)
 - **Variável de decisão:** o início da infusão de cada paciente, em slots de 10 min.
@@ -88,9 +125,11 @@ número com o hospital.
   - o preparo na capela respeita a capacidade da capela (restrição cumulativa);
   - a poltrona (acomodação + infusão + alta) respeita o número de poltronas (restrição cumulativa);
   - a infusão só começa depois que a bolsa foi preparada e transportada;
+  - o paciente chega à triagem **pelo menos 30 min antes do horário limite** do protocolo
+    (folga editável), o que dá **zero remarcações por prazo**;
   - tudo acontece dentro do turno.
 - **Objetivo, em ordem de peso:**
-  1. maximizar as horas de quimioterapia dentro do turno;
+  1. atender todos os pacientes do dia (maximizar as horas de quimioterapia no turno);
   2. suavizar a carga da capela (menor pico de preparo por hora);
   3. minimizar a espera na poltrona;
   4. minimizar o tempo em que a bolsa pronta fica parada.
@@ -101,4 +140,17 @@ número com o hospital.
   - a alta é preparada antes do fim da infusão.
 - **Reprodutibilidade:** o solver usa várias linhas de execução em paralelo, então
   duas execuções podem gerar agendas um pouco diferentes, com a mesma qualidade.
+
+### Resultado no dia padrão
+
+| Indicador | Hoje | Proposta |
+|---|---|---|
+| Remarcados por perder o horário limite | 2 | 0 |
+| Pacientes atendidos no dia | 88 | 90 |
+| Horas de quimioterapia no turno | 132,8 h | 140,8 h |
+| Horas de poltrona sem tratamento | 54,8 h | 22,5 h |
+| Esperam mais de 30 min | 24% | 0% |
+| Pico de pacientes na unidade | 44 | 24 |
+| Ocupação da capela manhã / tarde | 75% / 9% | 48% / 45% |
+
 # edeathon

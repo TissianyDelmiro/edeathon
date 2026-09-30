@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from dados import hhmm
+from dados import ROTULO, hhmm
 
 # Situações da poltrona (a interface associa cor + ícone + texto a cada uma)
 LIVRE, AGUARDANDO, INFUSAO, ALTA = "livre", "aguardando", "infusao", "alta"
@@ -22,6 +22,10 @@ BOLSA_ETAPAS = ["Prescrita", "Em preparo", "Pronta", "Em transporte", "Instalada
 
 LIMITE_ESPERA = 30  # min: alerta de espera longa
 AVISO_ALTA = 15  # min antes do fim da infusão: preparar a alta
+AVISO_LIMITE = 30  # min antes do horário limite: paciente ainda não chegou à triagem
+
+# Ordem dos alertas na tela (mais urgente primeiro)
+ORDEM_ALERTAS = {"espera": 0, "limite": 1, "remarcado": 2, "alta": 3}
 
 
 def estado_poltronas(ag: pd.DataFrame, t: float, n_poltronas: int) -> pd.DataFrame:
@@ -101,7 +105,7 @@ def fila_capela(ag: pd.DataFrame, t: float) -> pd.DataFrame:
     return pd.DataFrame({
         "Ordem": range(1, len(pend) + 1),
         "Paciente": pend["paciente"],
-        "Tipo de tratamento": pend["perfil"],
+        "Tipo de tratamento": pend["perfil"].map(ROTULO),
         "Poltrona": pend["poltrona"].astype("Int64"),
         "Poltrona libera": ["já está livre" if lib <= t else hhmm(lib) for lib in pend["libera"]],
         "Situação da bolsa": [situacao_bolsa(r, t) for _, r in pend.iterrows()],
@@ -109,8 +113,21 @@ def fila_capela(ag: pd.DataFrame, t: float) -> pd.DataFrame:
 
 
 def alertas(ag: pd.DataFrame, t: float) -> list[dict]:
-    """Alertas do instante t: preparar alta e espera acima de 30 min."""
+    """Alertas do instante t: espera acima de 30 min, perto do horário limite,
+    remarcado por perder o horário limite e preparar alta."""
     lista = []
+    # Horário limite: o paciente precisa chegar à triagem com o farmacêutico até o limite
+    for _, r in ag.iterrows():
+        faltam = r["limite_min"] - t
+        if r["chegada"] > t and 0 < faltam < AVISO_LIMITE:
+            lista.append({"tipo": "limite", "poltrona": 0,
+                          "texto": f"Perto do horário limite: {r['paciente']} ({r['protocolo']}) "
+                                   f"ainda não chegou à triagem. Limite às "
+                                   f"{hhmm(r['limite_min'])} (faltam {int(round(faltam))} min)"})
+        elif r["remarcado"] and t >= r["limite_min"]:
+            lista.append({"tipo": "remarcado", "poltrona": 0,
+                          "texto": f"{r['paciente']} ({r['protocolo']}) perdeu o horário limite "
+                                   f"das {hhmm(r['limite_min'])}: remarcado para outro dia"})
     atend = ag.dropna(subset=["senta"])
     for _, r in atend.iterrows():
         if r["senta"] <= t < r["inicio_infusao"] and t - r["senta"] > LIMITE_ESPERA:
@@ -124,7 +141,7 @@ def alertas(ag: pd.DataFrame, t: float) -> list[dict]:
                                    f"min para acabar a infusão de "
                                    f"{r['paciente']} (poltrona {int(r['poltrona'])}): "
                                    "preparar a alta"})
-    return sorted(lista, key=lambda a: (a["tipo"] != "espera", a["poltrona"]))
+    return sorted(lista, key=lambda a: (ORDEM_ALERTAS[a["tipo"]], a["poltrona"]))
 
 
 def na_recepcao(ag: pd.DataFrame, t: float) -> pd.DataFrame:
