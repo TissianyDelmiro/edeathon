@@ -197,9 +197,9 @@ with aba_comparar:
         otim = R["otim"]
         texto_status = (f"🧮 **Cálculo da agenda:** {otim['status_texto']} "
                         f"(levou {otim['tempo_s']:.0f} segundos).")
-        if otim["fora_do_turno"]:
-            texto_status += (f" ⚠️ {len(otim['fora_do_turno'])} paciente(s) não couberam no "
-                             f"turno: {', '.join(otim['fora_do_turno'])}.")
+        if otim["remarcados"]:
+            texto_status += (f" ⚠️ {len(otim['remarcados'])} paciente(s) não couberam no dia "
+                             f"e precisariam ser remarcados: {', '.join(otim['remarcados'])}.")
         st.info(texto_status)
 
         ka, ko = R["k_atual"], R["k_otim"]

@@ -8,17 +8,19 @@ Variáveis (por paciente):
 - slot de início da infusão (múltiplos de 10 min a partir do início do turno);
 - início do preparo da bolsa na capela (em minutos);
 - espera na poltrona (minutos entre sentar e começar a infusão);
-- se o paciente cabe no turno (quando não cabe, fica fora e é penalizado).
+- se o paciente é atendido no dia (se não couber, precisaria ser remarcado: penalizado).
 
 Restrições:
 - intervalo de preparo na capela: no máximo N bolsas ao mesmo tempo (cumulativa);
 - intervalo de poltrona = acomodação + espera + infusão + alta:
   no máximo N poltronas ocupadas ao mesmo tempo (cumulativa);
 - o paciente só começa a infusão quando a bolsa chegou (preparo + transporte);
+- horário limite do protocolo (folha do setor): o paciente chega à triagem pelo menos
+  `folga_limite` minutos antes do limite (zero remarcações por prazo);
 - tudo dentro do turno.
 
 Objetivo (soma ponderada, em ordem de importância):
-1. maximizar as horas de quimioterapia realizadas dentro do turno;
+1. atender todos os pacientes do dia (maximizar as horas de quimioterapia no turno);
 2. suavizar a carga da capela (minimizar o maior volume de preparo em uma hora);
 3. minimizar a espera total na poltrona;
 4. minimizar o tempo em que a bolsa pronta fica parada antes da infusão.
@@ -40,7 +42,7 @@ from simulacao_atual import COLUNAS_AGENDA
 SLOT = 10  # minutos por slot da agenda
 
 # Pesos do objetivo
-PESO_FORA_DO_TURNO = 1000  # por minuto de infusão que não coube no turno
+PESO_FORA_DO_TURNO = 1000  # por minuto de infusão de paciente que precisaria ser remarcado
 PESO_PICO_CAPELA = 20  # por minuto de preparo na hora mais carregada da capela
 PESO_ESPERA = 10  # por minuto de espera do paciente na poltrona
 PESO_BOLSA_PARADA = 1  # por minuto de bolsa pronta aguardando
@@ -71,10 +73,14 @@ def otimizar(dia: pd.DataFrame, prem: Premissas, limite_s: float = 20.0) -> dict
         x = m.new_bool_var(f"presente_{i}")
         # Primeiro slot possível: a bolsa precisa ser preparada e transportada
         k_min = int(np.ceil((prep + prem.transporte) / SLOT))
-        # Último slot possível: infusão + alta terminam até o fim do turno
+        # Último slot possível: infusão + alta terminam até o fim do turno...
         k_max = (fim - ini - inf - alta) // SLOT
+        # ...e o paciente chega à triagem com folga antes do horário limite do protocolo
+        # (a infusão começa no máximo acomodação + 60 min de espera depois de sentar)
+        chegada_max = int(r["limite_min"]) - prem.folga_limite
+        k_max = min(k_max, (chegada_max + prem.acomodacao + 60 - ini) // SLOT)
         if k_max < k_min:
-            m.add(x == 0)  # não cabe no turno de jeito nenhum
+            m.add(x == 0)  # não cabe no dia de jeito nenhum
             k_max = k_min
         k = m.new_int_var(k_min, k_max, f"slot_{i}")
         s_inf = m.new_int_var(ini, fim, f"inicio_inf_{i}")
@@ -91,6 +97,7 @@ def otimizar(dia: pd.DataFrame, prem: Premissas, limite_s: float = 20.0) -> dict
         senta = m.new_int_var(ini - 120, fim, f"senta_{i}")
         m.add(senta == s_inf - prem.acomodacao - w)
         m.add(senta >= ini).only_enforce_if(x)
+        m.add(senta <= chegada_max).only_enforce_if(x)
         dur_poltrona = m.new_int_var(prem.acomodacao + inf + alta,
                                      prem.acomodacao + 60 + inf + alta, f"dur_poltrona_{i}")
         m.add(dur_poltrona == prem.acomodacao + w + inf + alta)
@@ -192,7 +199,7 @@ def otimizar(dia: pd.DataFrame, prem: Premissas, limite_s: float = 20.0) -> dict
                                             prem.capacidade_capela)
     ag = ag[COLUNAS_AGENDA].sort_values("inicio_infusao", na_position="last").reset_index(drop=True)
     resultado["agenda"] = ag
-    resultado["fora_do_turno"] = ag.loc[ag["inicio_infusao"].isna(), "paciente"].tolist()
+    resultado["remarcados"] = ag.loc[ag["inicio_infusao"].isna(), "paciente"].tolist()
     resultado["pico_capela_hora"] = solver.value(pico)
     return resultado
 

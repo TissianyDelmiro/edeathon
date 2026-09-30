@@ -31,7 +31,7 @@ def test_status_e_tempo(resultado):
 def test_todos_no_turno(resultado):
     prem, _, r = resultado
     ag = r["agenda"]
-    assert r["fora_do_turno"] == []
+    assert r["remarcados"] == []
     assert (ag["senta"] >= prem.inicio_turno).all()
     assert (ag["inicio_preparo"] >= prem.inicio_turno).all()
     assert (ag["sai"] <= prem.fim_turno).all()
@@ -83,4 +83,30 @@ def test_paciente_que_nao_cabe_fica_fora():
     r = otimizar(gerar_dia(prem), prem, limite_s=10)
     assert r["ok"]
     longos = gerar_dia(prem).query("perfil == 'Longo'")["paciente"].tolist()
-    assert sorted(r["fora_do_turno"]) == sorted(longos)
+    assert sorted(r["remarcados"]) == sorted(longos)
+
+
+def test_zero_remarcacoes_com_folga_antes_do_limite(resultado):
+    prem, _, r = resultado
+    ag = r["agenda"]
+    assert not ag["remarcado"].any()
+    # Todos chegam à triagem pelo menos `folga_limite` min antes do horário limite
+    assert (ag["chegada"] <= ag["limite_min"] - prem.folga_limite).all()
+
+
+def test_proposta_atende_quem_hoje_seria_remarcado(resultado):
+    prem, dia, r = resultado
+    from simulacao_atual import simular_atual
+    hoje = simular_atual(dia, prem)
+    remarcados_hoje = set(hoje.loc[hoje["remarcado"], "paciente"])
+    assert remarcados_hoje  # o dia padrão tem remarcações hoje
+    atendidos = set(r["agenda"].dropna(subset=["inicio_infusao"])["paciente"])
+    assert remarcados_hoje <= atendidos
+
+
+def test_sexta_feira_e_folga_editavel():
+    prem = Premissas(sexta_feira=True, folga_limite=45)
+    r = otimizar(gerar_dia(prem), prem)
+    ag = r["agenda"]
+    assert r["ok"] and r["remarcados"] == []
+    assert (ag["chegada"] <= ag["limite_min"] - 45).all()
