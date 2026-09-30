@@ -1,4 +1,6 @@
-# Protótipo – Fluxo da quimioterapia (Ideathon CBEB 2026, Desafio 1)
+# Sinfonia – Fluxo da quimioterapia (Ideathon CBEB 2026, Desafio 1)
+
+<img src="img/sinfonia-logo.png" alt="Logo do Sinfonia" width="140">
 
 > **Protótipo com dados sintéticos. Não substitui decisão clínica nem o sistema Tasy.**
 
@@ -24,8 +26,9 @@ Para rodar os testes: `python -m pytest tests`
 
 | Aba | Para quê |
 |---|---|
-| 🏥 **Painel do dia** (tela inicial) | Para tablet ou TV do setor. Arraste a "hora atual" e veja o mapa das poltronas, os alertas (inclusive perto do horário limite e remarcados), a fila da farmácia e a situação das bolsas. |
+| 🏥 **Painel do dia** (tela inicial) | Para tablet ou TV do setor. Arraste a "hora atual" e veja o mapa das poltronas, os alertas (inclusive perto do horário limite e remarcados), **registre imprevistos** (atraso, falta, bolsa atrasada, término real da infusão) com o recálculo "planejado × realizado", a fila da farmácia e a situação das bolsas. |
 | 📊 **Hoje x Proposta** | Remarcações em destaque, indicadores lado a lado com a variação em %, gráficos por hora e a comparação da simulação com os números reais. |
+| 💚 **O que melhorou** | Dashboard do ganho para o paciente: horas a menos na unidade, histórias de pacientes fictícios ("PAC-069: 5h42 → 1h06"), antes e depois paciente a paciente, ganho por tipo de tratamento, para onde vai o tempo, **meta de espera** e **ociosidade** (poltronas livres, poltronas ocupadas sem tratar e capela parada). |
 | 📅 **Agenda do dia** | Gantt das poltronas e da capela, tabela de horários e exportação em CSV. |
 | ⚙️ **Premissas** | Edição de todos os valores de entrada e geração de um novo dia sintético. |
 
@@ -38,6 +41,9 @@ Para rodar os testes: `python -m pytest tests`
 | `simulacao_atual.py` | Simulação de eventos discretos do funcionamento atual (filas por ordem de chegada) |
 | `otimizador.py` | Modelo CP-SAT (OR-Tools) da agenda otimizada |
 | `indicadores.py` | Cálculo dos indicadores e das séries por hora |
+| `ganhos.py` | Ganho por paciente (tempo na unidade hoje × proposta), meta de espera |
+| `ocorrencias.py` | Imprevistos registrados e recálculo do dia realizado (efeito em cascata) |
+| `img/` | Logo e símbolo do Sinfonia |
 | `painel.py` | Estado da unidade em uma hora qualquer (poltronas, bolsas, fila, alertas) |
 | `ui_componentes.py` / `app.py` | Interface acessível em Streamlit |
 
@@ -54,6 +60,7 @@ Para rodar os testes: `python -m pytest tests`
 | Acomodação (proposta) | o paciente senta 10 min antes da bolsa chegar |
 | Folga antes do horário limite (proposta) | 30 min |
 | Sexta-feira | desmarcada (quando marcada, todos os limites ficam 1h mais cedo) |
+| Meta de espera na poltrona | 30 min |
 
 ### Tipos de tratamento (cores da folha do setor)
 
@@ -140,6 +147,15 @@ infusão.
   - a alta é preparada antes do fim da infusão.
 - **Reprodutibilidade:** o solver usa várias linhas de execução em paralelo, então
   duas execuções podem gerar agendas um pouco diferentes, com a mesma qualidade.
+
+### Imprevistos (Painel do dia)
+- A equipe registra **o que aconteceu**: atraso do paciente (hora real de chegada), falta,
+  atraso da bolsa (minutos) ou hora real de término da infusão informada pela enfermagem.
+- O dia é **recalculado sem replanejar**: cada paciente continua na poltrona planejada; se o
+  anterior sair mais tarde, o próximo espera (efeito em cascata). Quem chegar depois do
+  horário limite do protocolo vira remarcado.
+- A tela mostra "planejado × realizado" e avisa quando a poltrona passa do fim do turno.
+- É só registro: o sistema não toma nenhuma decisão clínica.
 
 ### Resultado no dia padrão
 

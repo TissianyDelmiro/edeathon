@@ -6,6 +6,11 @@ from streamlit.testing.v1 import AppTest
 APP = str(Path(__file__).resolve().parents[1] / "app.py")
 
 
+def _botao(at, rotulo):
+    """Botão pelo texto (a ordem dos botões na página muda quando a tela muda)."""
+    return next(b for b in at.button if b.label == rotulo)
+
+
 def _rodar():
     at = AppTest.from_file(APP, default_timeout=90)
     at.run()
@@ -18,7 +23,8 @@ def test_app_abre_com_aviso_e_abas():
     textos = " ".join(m.value for m in at.markdown)
     assert "Protótipo com dados sintéticos. Não substitui decisão clínica nem o sistema Tasy." in textos
     assert [t.label for t in at.tabs] == ["🏥 Painel do dia", "📊 Hoje x Proposta",
-                                         "📅 Agenda do dia", "⚙️ Premissas"]
+                                         "💚 O que melhorou", "📅 Agenda do dia",
+                                         "⚙️ Premissas"]
     assert not at.error
 
 
@@ -34,7 +40,7 @@ def test_mudar_hora_e_cenario():
 def test_erro_de_mix_em_portugues():
     at = _rodar()
     at.number_input[0].set_value(50)  # total de pacientes
-    at.button[0].click().run()  # botão do formulário
+    _botao(at, "▶️ Gerar dia sintético e calcular agenda").click().run()
     assert not at.exception
 
 
@@ -51,7 +57,7 @@ def test_premissas_sexta_feira_e_folga():
     at.checkbox[0].check()
     folga = next(n for n in at.number_input if n.label.startswith("Folga antes do horário limite"))
     folga.set_value(45)
-    at.button[0].click().run()  # botão do formulário
+    _botao(at, "▶️ Gerar dia sintético e calcular agenda").click().run()
     assert not at.exception
     prem = at.session_state["premissas"]
     assert prem.sexta_feira and prem.folga_limite == 45
@@ -72,3 +78,39 @@ def test_premissas_de_versao_antiga_na_sessao():
     assert not at.exception, at.exception
     assert not at.error
     assert hasattr(at.session_state["premissas"], "folga_limite")
+
+
+def test_marca_sinfonia_e_rodape():
+    at = _rodar()
+    textos = " ".join(m.value for m in at.markdown)
+    assert "Sinfonia" in textos
+    assert "data:image/png;base64," in textos  # símbolo embutido no cabeçalho
+    assert "Privacidade (LGPD)" in textos  # rodapé institucional
+
+
+def test_registrar_e_desfazer_imprevisto():
+    at = _rodar()
+    # Paciente: fica o primeiro da agenda (padrão)
+    tipo = next(s for s in at.selectbox if s.label == "O que aconteceu?")
+    tipo.set_value("falta")
+    next(b for b in at.button if b.label == "✅ Registrar").click().run()
+    assert not at.exception, at.exception
+    assert len(at.session_state["ocorrencias"]) == 1
+    textos = " ".join(m.value for m in at.markdown)
+    assert "🚫 Faltou" in textos and "imprevistos registrados" in textos
+    next(b for b in at.button if b.label == "↩️ Desfazer o último").click().run()
+    assert not at.exception
+    assert at.session_state["ocorrencias"] == []
+
+
+def test_imprevisto_invalido_mostra_erro_em_portugues():
+    at = _rodar()
+    tipo = next(s for s in at.selectbox if s.label == "O que aconteceu?")
+    tipo.set_value("atraso").run()
+    hora = next(t for t in at.time_input if t.label == "Hora real de chegada à triagem")
+    from datetime import time as _t
+    hora.set_value(_t(6, 0))  # antes do horário marcado: inválido
+    next(b for b in at.button if b.label == "✅ Registrar").click().run()
+    assert not at.exception
+    assert any("precisa ser depois do horário marcado" in e.value for e in at.error)
+    assert at.session_state["ocorrencias"] == []

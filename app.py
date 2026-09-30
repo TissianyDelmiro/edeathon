@@ -1,5 +1,5 @@
 """
-Protótipo – Fluxo da quimioterapia (Ideathon CBEB 2026, Desafio 1).
+Sinfonia – Fluxo da quimioterapia (Ideathon CBEB 2026, Desafio 1).
 
 Rodar com:  streamlit run app.py
 
@@ -20,9 +20,12 @@ from pathlib import Path
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 
+import ganhos as G
 import indicadores as I
+import ocorrencias as O
 import painel as P
 import ui_componentes as ui
 from dados import (A_CONFIRMAR, GRUPO_DA_COR, PERFIS, ROTULO, Premissas, carregar_protocolos,
@@ -30,7 +33,8 @@ from dados import (A_CONFIRMAR, GRUPO_DA_COR, PERFIS, ROTULO, Premissas, carrega
 from otimizador import otimizar
 from simulacao_atual import simular_atual
 
-st.set_page_config(page_title="Quimioterapia – Painel do dia", page_icon="💧", layout="wide")
+st.set_page_config(page_title="Sinfonia – Fluxo da quimioterapia",
+                   page_icon=str(ui.ICONE) if ui.ICONE.exists() else "💧", layout="wide")
 ui.aplicar_estilo()
 
 COR_DO_GRUPO = {g: c for c, g in GRUPO_DA_COR.items()}  # ex.: "Longo" -> "vermelho"
@@ -104,11 +108,16 @@ def eixo_horas(fig):
     return fig
 
 
-ui.cabecalho(f"Organização do dia · dia sintético com {prem.n_pacientes} pacientes · "
-             f"{prem.n_poltronas} poltronas · capela com {prem.capacidade_capela} postos")
+ui.cabecalho(
+    "Fluxo da quimioterapia em harmonia",
+    [f"👥 {prem.n_pacientes} pacientes (fictícios)", f"🪑 {prem.n_poltronas} poltronas",
+     f"🧪 Capela: {prem.capacidade_capela} postos",
+     f"🕖 {hhmm(prem.inicio_turno)}–{hhmm(prem.fim_turno)}"]
+    + (["📅 Sexta-feira"] if prem.sexta_feira else []))
 
-aba_painel, aba_comparar, aba_agenda, aba_premissas = st.tabs(
-    ["🏥 Painel do dia", "📊 Hoje x Proposta", "📅 Agenda do dia", "⚙️ Premissas"])
+aba_painel, aba_comparar, aba_melhorou, aba_agenda, aba_premissas = st.tabs(
+    ["🏥 Painel do dia", "📊 Hoje x Proposta", "💚 O que melhorou", "📅 Agenda do dia",
+     "⚙️ Premissas"])
 
 # ---------------------------------------------------------------------------
 # Aba 1 – Painel do dia
@@ -130,7 +139,118 @@ with aba_painel:
                              step=timedelta(minutes=5), format="HH:mm")
 
     t = hora.hour * 60 + hora.minute
-    ag = R["otim"]["agenda"] if escolha.startswith("Proposta") else R["atual"]
+
+    # Imprevistos registrados valem para o dia atual (zeram quando as premissas mudam)
+    chave_dia = para_json(prem) + versao_do_codigo()
+    if st.session_state.get("ocorrencias_chave") != chave_dia:
+        st.session_state.ocorrencias_chave = chave_dia
+        st.session_state.ocorrencias = []
+    ocorrencias = st.session_state.ocorrencias
+    usa_proposta = escolha.startswith("Proposta")
+    if usa_proposta:
+        plano = R["otim"]["agenda"]
+        ag = O.aplicar(plano, ocorrencias, prem.alta_antecipada)
+    else:
+        ag = R["atual"]
+
+    with ui.bloco("imprevistos"):
+        titulo = "📝 Registrar imprevisto" + (f" ({len(ocorrencias)} registrado"
+                                             f"{'s' if len(ocorrencias) != 1 else ''})"
+                                             if ocorrencias else "")
+        ui.titulo_bloco(titulo, (
+            "Quando o dia foge da agenda, registre aqui **o que aconteceu**. O painel, os "
+            "alertas e a fila da capela são recalculados na hora.\n\n"
+            "- **⏰ Paciente atrasou**: hora real de chegada à triagem. Depois do horário "
+            "limite do protocolo, o paciente é remarcado.\n"
+            "- **🚫 Paciente faltou**: a poltrona fica livre e a bolsa sai da fila.\n"
+            "- **📦 Bolsa atrasou**: minutos de atraso (devolução, falta de insumo...).\n"
+            "- **💧 Infusão terminou em outro horário**: hora real informada pela "
+            "enfermagem.\n\n"
+            "Cada paciente continua na poltrona planejada: se o anterior sair mais tarde, o "
+            "próximo espera. É só um **registro**: o sistema não toma decisão clínica."))
+        if not usa_proposta:
+            st.info("ℹ️ Os imprevistos são registrados na **agenda organizada**. Escolha "
+                    "\"Proposta (agenda organizada)\" acima para registrar.")
+        else:
+            with st.expander("Abrir o registro de imprevistos", expanded=bool(ocorrencias)):
+                na_agenda = plano.sort_values("chegada")
+                opcoes_pac = {
+                    r["paciente"]: (f"{r['paciente']} · {r['protocolo']} · chega "
+                                    f"{hhmm(r['chegada'])} · poltrona "
+                                    f"{'—' if pd.isna(r['poltrona']) else int(r['poltrona'])}")
+                    for _, r in na_agenda.iterrows()}
+                c1, c2 = st.columns([3, 2])
+                pac = c1.selectbox("Paciente", list(opcoes_pac), format_func=opcoes_pac.get)
+                tipo = c2.selectbox("O que aconteceu?", list(O.TIPOS), format_func=O.TIPOS.get)
+                linha = plano.set_index("paciente").loc[pac]
+                valor = None
+                if tipo == "atraso":
+                    base = int(linha["chegada"]) + 30
+                    h = st.time_input("Hora real de chegada à triagem",
+                                      time(min(base, 23 * 60) // 60, min(base, 23 * 60) % 60),
+                                      step=300)
+                    valor = h.hour * 60 + h.minute
+                    st.caption(f"Marcado para {hhmm(linha['chegada'])} · horário limite do "
+                               f"protocolo: {hhmm(linha['limite_min'])}")
+                elif tipo == "bolsa":
+                    valor = st.number_input("Quantos minutos a bolsa atrasou?", 1, 240, 20)
+                elif tipo == "termino" and not pd.isna(linha["fim_infusao"]):
+                    base = int(linha["fim_infusao"]) + 20
+                    h = st.time_input("Hora real de término (informada pela enfermagem)",
+                                      time(min(base, 23 * 60) // 60, min(base, 23 * 60) % 60),
+                                      step=300)
+                    valor = h.hour * 60 + h.minute
+                    st.caption(f"Término previsto: {hhmm(linha['fim_infusao'])}")
+                b1, b2, b3 = st.columns(3)
+                if b1.button("✅ Registrar", type="primary", width="stretch"):
+                    novo = {"paciente": pac, "tipo": tipo, "valor": valor}
+                    erro = O.validar(novo, plano)
+                    if erro:
+                        st.error(f"❌ {erro}")
+                    else:
+                        ocorrencias.append(novo)
+                        st.rerun()
+                if b2.button("↩️ Desfazer o último", width="stretch", disabled=not ocorrencias):
+                    ocorrencias.pop()
+                    st.rerun()
+                if b3.button("🗑️ Apagar todos", width="stretch", disabled=not ocorrencias):
+                    ocorrencias.clear()
+                    st.rerun()
+
+            if ocorrencias:
+                comp = O.planejado_x_realizado(plano, ag)
+                atrasos = (comp["sai_real"] - comp["sai_plano"]).clip(lower=0)
+                ui.resumo([
+                    ui.cartao_resumo("📝", "imprevistos registrados", len(ocorrencias),
+                                     *ui.NEUTRO),
+                    ui.cartao_resumo("👥", "pacientes afetados (com efeito em cascata)",
+                                     len(comp), "#b27600", "#fff5dc"),
+                    ui.cartao_resumo("⏱️", "minutos de poltrona a mais no dia",
+                                     int(atrasos.sum()), *ui.ESPERA_LONGA[2:]),
+                ])
+
+                def situacao(r):
+                    if r["faltou"]:
+                        return "🚫 Faltou"
+                    if r["remarcado"]:
+                        return "❌ Remarcado (perdeu o horário limite)"
+                    d = r["sai_real"] - r["sai_plano"]
+                    texto = (f"⏱️ Libera {int(round(d))} min mais tarde" if d > 0.5
+                             else "✅ No horário")
+                    if r["sai_real"] > prem.fim_turno:
+                        texto += f" · ⚠️ passa do fim do turno ({hhmm(prem.fim_turno)})"
+                    return texto
+
+                ui.tabela(pd.DataFrame({
+                    "Paciente": comp["paciente"],
+                    "O que aconteceu": comp["imprevisto"],
+                    "Poltrona": comp["poltrona"].astype("Int64"),
+                    "Senta (planejado → real)": [f"{hhmm(a)} → {hhmm(b)}" for a, b in
+                                                 zip(comp["senta_plano"], comp["senta_real"])],
+                    "Libera (planejado → real)": [f"{hhmm(a)} → {hhmm(b)}" for a, b in
+                                                  zip(comp["sai_plano"], comp["sai_real"])],
+                    "Situação": comp.apply(situacao, axis=1),
+                }))
 
     estado = P.estado_poltronas(ag, t, prem.n_poltronas)
     cont = estado["situacao"].value_counts()
@@ -348,7 +468,268 @@ with aba_comparar:
             ui.tabela(calib)
 
 # ---------------------------------------------------------------------------
-# Aba 3 – Agenda do dia
+# Aba 3 – O que melhorou (ganhos para o paciente, meta de espera e ociosidade)
+# ---------------------------------------------------------------------------
+with aba_melhorou:
+    if not otim_ok:
+        st.warning("⚠️ Sem agenda organizada para comparar. Ajuste as premissas.")
+    else:
+        atual, otim_ag = R["atual"], R["otim"]["agenda"]
+        jor = G.jornada(atual, otim_ag)
+        res = G.resumo(jor, prem.meta_espera)
+        dur = G.formatar_duracao
+        st.caption("📌 Estimativas do modelo com **pacientes fictícios**. Na proposta o paciente "
+                   "chega no horário marcado: parte do ganho é tempo que ele passa em casa, e "
+                   "não esperando na unidade. A duração da infusão **nunca muda**.")
+
+        # 1) Números de impacto
+        with ui.bloco("impacto"):
+            ui.titulo_bloco("💚 O que o Sinfonia muda no dia", (
+                "Resumo do ganho para os pacientes no dia sintético.\n\n"
+                "**Horas a menos na unidade**: soma, paciente a paciente, do tempo que cada um "
+                "deixa de passar na unidade (da chegada até liberar a poltrona).\n\n"
+                "**Remarcações evitadas**: pacientes que hoje perderiam o horário limite e "
+                "voltariam outro dia.\n\n"
+                f"**Meta de espera**: {prem.meta_espera} min sentado aguardando a bolsa "
+                "(editável na aba Premissas)."))
+            ui.cartoes_impacto([
+                ("⏱️", f"{res['horas_economizadas']:.0f} h",
+                 "a menos de pacientes na unidade",
+                 f"{res['pacientes_com_ganho']} de {res['pacientes_comparados']} pacientes "
+                 "ficam menos tempo", ui.TEAL),
+                ("🏠", dur(res["tempo_medio_hoje"]) + " → " + dur(res["tempo_medio_proposta"]),
+                 "tempo médio na unidade", "da chegada até liberar a poltrona", ui.MARINHO),
+                ("📅", str(res["remarcados_evitados"]), "remarcações evitadas",
+                 "pacientes que perderiam o horário limite", ui.OK[0]),
+                ("🎯", f"{res['acima_meta_hoje']} → {res['acima_meta_proposta']}",
+                 f"pacientes acima da meta de {prem.meta_espera} min",
+                 "sentados esperando a bolsa", "#b27600"),
+            ])
+
+        # 2) Histórias de pacientes
+        with ui.bloco("historias"):
+            ui.titulo_bloco("👤 Histórias de pacientes (fictícios)", (
+                "Exemplos reais **do modelo**: os pacientes fictícios com o maior ganho e os "
+                "que deixariam de ser remarcados.\n\n"
+                "**Hoje**: tempo na unidade na simulação do funcionamento atual.\n\n"
+                "**Com o Sinfonia**: tempo na unidade com a agenda organizada."))
+            hist = []
+            for _, r in jor[jor["remarcado_hoje"] & ~jor["remarcado_proposta"]].iterrows():
+                hist.append({
+                    "paciente": r["paciente"], "grupo": r["perfil"],
+                    "hoje": "Remarcado", "proposta": dur(r["tempo_proposta"]),
+                    "selo": "✅ Atendido no mesmo dia",
+                    "frase": f"{r['protocolo']}: hoje perderia o horário limite e voltaria "
+                             f"outro dia. Com o Sinfonia chega às {hhmm(r['chegada_proposta'])} "
+                             f"e começa a infusão às {hhmm(r['inicio_infusao_proposta'])}."})
+            for _, r in G.maiores_ganhos(jor, 6 - min(len(hist), 2)).iterrows():
+                hist.append({
+                    "paciente": r["paciente"], "grupo": r["perfil"],
+                    "hoje": dur(r["tempo_hoje"]), "proposta": dur(r["tempo_proposta"]),
+                    "selo": f"⏱️ {dur(r['ganho'])} a menos",
+                    "frase": f"Esperava {dur(r['espera_hoje'])} sentado pela bolsa; com o "
+                             f"Sinfonia espera {dur(r['espera_proposta'])} "
+                             "(só a acomodação planejada)."})
+            ui.cartoes_historia(hist[:6])
+            piores = jor[jor["ganho"] < 0]
+            if len(piores):
+                st.caption(f"ℹ️ {len(piores)} paciente(s) ficam até "
+                           f"{dur(-piores['ganho'].min())} a mais: hoje não esperam nada, e a "
+                           f"proposta reserva {prem.acomodacao} min de acomodação antes da bolsa.")
+
+        # 3) Antes e depois por paciente (gráfico de halteres)
+        with ui.bloco("halteres"):
+            ui.titulo_bloco("↔️ Antes e depois, paciente a paciente", (
+                "Cada linha é um paciente fictício. A bolinha **cinza** é o tempo na unidade "
+                "hoje e a **verde-azulada** é com o Sinfonia. Quanto maior a linha, maior o "
+                "ganho. Mostra os 20 pacientes com mais ganho."))
+            top = G.maiores_ganhos(jor, 20).iloc[::-1]
+            fig = go.Figure()
+            for _, r in top.iterrows():
+                fig.add_trace(go.Scatter(x=[r["tempo_proposta"] / 60, r["tempo_hoje"] / 60],
+                                         y=[r["paciente"]] * 2, mode="lines",
+                                         line=dict(color="#c7d0d8", width=4),
+                                         hoverinfo="skip", showlegend=False))
+            for nome, col, cor in (("Hoje", "tempo_hoje", ui.COR_HOJE),
+                                   ("Com o Sinfonia", "tempo_proposta", ui.COR_PROPOSTA)):
+                fig.add_trace(go.Scatter(
+                    x=top[col] / 60, y=top["paciente"], mode="markers", name=nome,
+                    marker=dict(size=14, color=cor, line=dict(color="white", width=2)),
+                    customdata=top[[col, "ganho"]].map(dur).to_numpy(),
+                    hovertemplate="%{y}: %{customdata[0]}<br>Ganho: %{customdata[1]}"
+                                  "<extra>" + nome + "</extra>"))
+            fig.update_xaxes(title="Horas na unidade", ticksuffix=" h", rangemode="tozero")
+            fig.update_yaxes(title=None, tickfont=dict(size=16))
+            st.plotly_chart(ui.estilo_grafico(fig, "Tempo na unidade por paciente",
+                                              altura=620), width="stretch")
+
+        # 4) Ganho por tipo de tratamento  e  5) Para onde foi o tempo
+        with ui.bloco("por_grupo"):
+            ui.titulo_bloco("🎨 Por tipo de tratamento", (
+                "Tempo médio na unidade de cada tipo de tratamento (cores da folha do setor), "
+                "hoje x com o Sinfonia."))
+            pg_ = G.por_grupo(jor, PERFIS)
+            pg_["Tipo"] = pg_["perfil"].map(lambda g: ROTULO[g].split(" (")[0])
+            longo = pg_.melt(id_vars="Tipo", value_vars=["tempo_hoje", "tempo_proposta"],
+                             var_name="Cenário", value_name="min")
+            longo["Cenário"] = longo["Cenário"].map({"tempo_hoje": "Hoje",
+                                                     "tempo_proposta": "Com o Sinfonia"})
+            longo["horas"] = longo["min"] / 60
+            longo["texto"] = longo["min"].map(dur)
+            fig = px.bar(longo, y="Tipo", x="horas", color="Cenário", barmode="group",
+                         orientation="h", text="texto",
+                         color_discrete_map={"Hoje": ui.COR_HOJE, "Com o Sinfonia": ui.COR_PROPOSTA},
+                         hover_data={"horas": False, "texto": True})
+            fig.update_traces(marker_line_color="white", marker_line_width=2,
+                              textposition="outside", cliponaxis=False)
+            fig.update_xaxes(title="Horas na unidade (média)", ticksuffix=" h")
+            fig.update_yaxes(title=None, autorange="reversed")
+            fig.update_layout(margin=dict(r=70))
+            st.plotly_chart(ui.estilo_grafico(fig, "Tempo médio por tipo", altura=520),
+                            width="stretch")
+        with ui.bloco("composicao"):
+            ui.titulo_bloco("🧩 Para onde vai o tempo", (
+                "Soma das horas de todos os pacientes no dia, dividida em etapas.\n\n"
+                "A **infusão** de cada paciente é igual nos dois cenários: o ganho vem da "
+                "recepção, da espera pela bolsa e da alta. O total de infusão sobe um pouco "
+                "porque os pacientes que hoje seriam remarcados passam a ser atendidos."))
+            cores_etapa = {"Recepção (sem poltrona)": "#c62828", "Espera na poltrona": "#b27600",
+                           "Infusão": ui.TEAL, "Alta": "#4a3aa7"}
+            comp = pd.DataFrame([
+                {"Cenário": nome, "Etapa": e, "horas": h}
+                for nome, ag_ in (("Hoje", atual), ("Com o Sinfonia", otim_ag))
+                for e, h in G.composicao(ag_).items()])
+            comp["texto"] = comp["horas"].map(lambda h: f"{h:.0f} h" if h >= 6 else "")
+            fig = px.bar(comp, y="Cenário", x="horas", color="Etapa", orientation="h",
+                         text="texto", color_discrete_map=cores_etapa,
+                         category_orders={"Etapa": list(cores_etapa),
+                                          "Cenário": ["Hoje", "Com o Sinfonia"]},
+                         hover_data={"texto": False, "horas": ":.1f"})
+            fig.update_traces(marker_line_color="white", marker_line_width=2,
+                              textfont=dict(color="#ffffff", size=17), textangle=0,
+                              insidetextanchor="middle")
+            fig.update_xaxes(title="Horas somadas no dia", ticksuffix=" h")
+            fig.update_yaxes(title=None)
+            st.plotly_chart(ui.estilo_grafico(fig, "Horas por etapa", altura=380),
+                            width="stretch")
+
+        # 6) Meta de espera
+        with ui.bloco("meta"):
+            ui.titulo_bloco(f"🎯 Meta de espera: até {prem.meta_espera} min na poltrona", (
+                "Quanto tempo cada paciente fica **sentado esperando a bolsa**. A linha "
+                "tracejada é a meta (editável na aba Premissas). Barras à direita da linha "
+                "são pacientes fora da meta."))
+            dentro_h = G.dentro_da_meta(atual, prem.meta_espera)
+            dentro_p = G.dentro_da_meta(otim_ag, prem.meta_espera)
+            ui.resumo([
+                ui.cartao_resumo("🎯", "dentro da meta hoje", f"{dentro_h:.0f}%", *ui.NEUTRO),
+                ui.cartao_resumo("✅", "dentro da meta com o Sinfonia", f"{dentro_p:.0f}%",
+                                 *ui.OK),
+            ])
+            esp = pd.concat([
+                pd.DataFrame({"Cenário": "Hoje", "min": jor["espera_hoje"]}),
+                pd.DataFrame({"Cenário": "Com o Sinfonia", "min": jor["espera_proposta"]}),
+            ]).dropna()
+            # Faixas de 10 min até 2h; esperas maiores ficam juntas em "2h ou mais"
+            limites = list(range(0, 121, 10))
+            nomes_faixa = [f"{a}–{b}" for a, b in zip(limites[:-1], limites[1:])] + ["2h ou mais"]
+            esp["Faixa"] = pd.cut(esp["min"].clip(upper=120.5), limites + [10_000],
+                                  labels=nomes_faixa, right=False, include_lowest=True)
+            cont = (esp.groupby(["Faixa", "Cenário"], observed=False).size()
+                    .rename("Pacientes").reset_index())
+            cont["texto"] = cont["Pacientes"].map(lambda n: str(n) if n else "")
+            fig = px.bar(cont, x="Faixa", y="Pacientes", color="Cenário", barmode="group",
+                         text="texto",
+                         category_orders={"Faixa": nomes_faixa,
+                                          "Cenário": ["Hoje", "Com o Sinfonia"]},
+                         color_discrete_map={"Hoje": ui.COR_HOJE,
+                                             "Com o Sinfonia": ui.COR_PROPOSTA})
+            fig.update_traces(marker_line_color="white", marker_line_width=2,
+                              textposition="outside", cliponaxis=False,
+                              hovertemplate="%{x} min: %{y} pacientes")
+            # Linha da meta entre as faixas (faixas de 10 min começando em 0)
+            pos = prem.meta_espera / 10 - 0.5
+            fig.add_vline(x=pos, line_dash="dash", line_color=ui.MARINHO, line_width=3,
+                          annotation_text=f"Meta: {prem.meta_espera} min",
+                          annotation_position="top right", annotation_font_size=18)
+            fig.update_xaxes(title="Minutos sentado esperando a bolsa")
+            fig.update_yaxes(title="Pacientes")
+            st.plotly_chart(ui.estilo_grafico(fig, "Espera na poltrona x meta", altura=420),
+                            width="stretch")
+
+        # 7) Ociosidade
+        with ui.bloco("ociosidade"):
+            ui.titulo_bloco("💤 Ociosidade ao longo do dia", (
+                "Média de cada hora do turno:\n\n"
+                "- **Poltronas livres**: poltronas vazias. Na proposta sobram mais poltronas "
+                "porque cada paciente usa a poltrona por menos tempo: é **capacidade para "
+                "atender mais pacientes**.\n"
+                "- **Poltronas ocupadas sem tratar**: o paciente está sentado, mas esperando a "
+                "bolsa ou a alta. É o desperdício **escondido**: quanto menor, melhor.\n"
+                "- **Capela parada**: % da capacidade da capela sem preparo. Hoje ela fica "
+                "sobrecarregada de manhã (0% parada) e quase parada à tarde; com o Sinfonia o "
+                "trabalho fica equilibrado."))
+            oc = pd.concat([
+                I.ociosidade_por_hora(atual, prem).assign(Cenário="Hoje"),
+                I.ociosidade_por_hora(otim_ag, prem).assign(Cenário="Com o Sinfonia"),
+            ])
+            oc["Hora"] = oc["hora"].map(lambda m: f"{m // 60}h")
+            paineis = [("poltronas_sem_tratar", "Poltronas ocupadas sem tratar", ""),
+                       ("poltronas_ociosas", "Poltronas livres", ""),
+                       ("capela_ociosa", "Capela parada", "%")]
+            fig = make_subplots(rows=1, cols=3, subplot_titles=[p[1] for p in paineis],
+                                horizontal_spacing=0.07)
+            for i, (col, _, suf) in enumerate(paineis, start=1):
+                for nome, cor in (("Hoje", ui.COR_HOJE), ("Com o Sinfonia", ui.COR_PROPOSTA)):
+                    d = oc[oc["Cenário"] == nome]
+                    fig.add_trace(go.Scatter(
+                        x=d["Hora"], y=d[col], name=nome, mode="lines+markers",
+                        line=dict(color=cor, width=3), marker=dict(size=9),
+                        legendgroup=nome, showlegend=(i == 1),
+                        hovertemplate="%{x}: %{y:.0f}" + suf + "<extra>" + nome + "</extra>"),
+                        row=1, col=i)
+                fig.update_yaxes(rangemode="tozero", ticksuffix=suf, row=1, col=i)
+            fig.update_annotations(font_size=19)
+            fig.update_xaxes(dtick=2)
+            ui.estilo_grafico(fig, "Ociosidade por hora", altura=470)
+            fig.update_layout(legend=dict(orientation="h", y=-0.18, x=0, yanchor="top"),
+                              margin=dict(t=50, b=90))
+            st.plotly_chart(fig, width="stretch")
+            sem_h = I.ociosidade_por_hora(atual, prem)["poltronas_sem_tratar"].mean()
+            sem_p = I.ociosidade_por_hora(otim_ag, prem)["poltronas_sem_tratar"].mean()
+            st.caption(f"Em média, **{sem_h:.1f} poltronas** ficam ocupadas sem tratamento "
+                       f"a cada hora hoje; com o Sinfonia, **{sem_p:.1f}**.")
+
+        # 8) Tabela completa
+        with ui.bloco("tabela_ganhos"):
+            ui.titulo_bloco("📋 Todos os pacientes", (
+                "Tempo na unidade de cada paciente fictício, hoje e com o Sinfonia. "
+                "Use o filtro para ver um tipo de tratamento."))
+            filtro = st.selectbox("Tipo de tratamento", ["Todos"] + [ROTULO[p] for p in PERFIS])
+            vis = jor if filtro == "Todos" else jor[jor["perfil"].map(ROTULO) == filtro]
+            vis = vis.sort_values("ganho", ascending=False, na_position="first")
+            tab = pd.DataFrame({
+                "Paciente": vis["paciente"],
+                "Protocolo": vis["protocolo"],
+                "Tipo de tratamento": vis["perfil"].map(ROTULO),
+                "Hoje": [("❌ Remarcado" if rem else dur(t))
+                         for rem, t in zip(vis["remarcado_hoje"], vis["tempo_hoje"])],
+                "Com o Sinfonia": vis["tempo_proposta"].map(dur),
+                "Diferença": [("✅ atendido no dia" if rem else
+                               (f"⏱️ {dur(g)} a menos" if g > 0 else
+                                ("igual" if round(g) == 0 else f"{dur(-g)} a mais")))
+                              for rem, g in zip(vis["remarcado_hoje"], vis["ganho"])],
+                "Espera pela bolsa (hoje → Sinfonia)": [
+                    f"{dur(a)} → {dur(b)}" for a, b in zip(vis["espera_hoje"],
+                                                          vis["espera_proposta"])],
+            })
+            st.download_button("⬇️ Baixar tabela (CSV)",
+                               tab.to_csv(index=False, sep=";").encode("utf-8-sig"),
+                               file_name="ganhos_por_paciente.csv", mime="text/csv")
+            ui.tabela(tab)
+
+# ---------------------------------------------------------------------------
+# Aba 4 – Agenda do dia
 # ---------------------------------------------------------------------------
 with aba_agenda:
     if not otim_ok:
@@ -439,7 +820,7 @@ with aba_agenda:
             ui.tabela(tabela_agenda)
 
 # ---------------------------------------------------------------------------
-# Aba 4 – Premissas
+# Aba 5 – Premissas
 # ---------------------------------------------------------------------------
 with aba_premissas:
     st.markdown("Valores usados no protótipo. **Todos são suposições a validar com o hospital.** "
@@ -509,6 +890,12 @@ with aba_premissas:
                 "Tipo de tratamento": tab_lim["grupo"].map(ROTULO),
             }))
 
+        ui.titulo_bloco("🎯 Meta de espera", (
+            "Tempo máximo desejado para o paciente ficar **sentado esperando a bolsa**. "
+            "Usada nos gráficos e indicadores da aba **O que melhorou**."))
+        meta = st.number_input(f"Meta de espera na poltrona, em min ({SUP})", 5, 180,
+                               prem.meta_espera)
+
         ui.titulo_bloco("🚪 Alta e transporte", (
             "**Alta hoje**: minutos entre o fim da infusão e a liberação da poltrona no Tasy.\n\n"
             "**Alta antecipada**: o mesmo tempo quando a alta é preparada antes do fim da "
@@ -575,7 +962,9 @@ with aba_premissas:
                 calibracao={r["Tipo de tratamento"]: {
                     "pre": float(r.iloc[1]) / 100, "atraso": float(r.iloc[2])}
                     for _, r in calib_editada.iterrows()},
-                sexta_feira=bool(sexta), folga_limite=int(folga),
+                sexta_feira=bool(sexta), folga_limite=int(folga), meta_espera=int(meta),
                 atraso_liberacao_dispersao=float(disp), semente=int(sem))
             st.success("✅ Premissas salvas. Calculando o novo dia…")
             st.rerun()
+
+ui.rodape()

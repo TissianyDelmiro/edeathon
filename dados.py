@@ -113,6 +113,8 @@ class Premissas:
     # Horário limite (folha do setor)
     sexta_feira: bool = False  # às sextas, todos os limites ficam 1h mais cedo
     folga_limite: int = 30  # proposta: chegar à triagem pelo menos X min antes do limite
+    # Meta de espera na poltrona (min): usada nos indicadores e gráficos de meta
+    meta_espera: int = 30
     # Tempos de processo (minutos)
     alta_atual: int = 15  # do fim da infusão até liberar a poltrona no Tasy (hoje)
     alta_antecipada: int = 5  # idem, com a alta preparada antes do fim da infusão

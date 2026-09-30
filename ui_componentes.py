@@ -1,13 +1,18 @@
 """
-Componentes visuais acessíveis (fonte grande, alto contraste, cor + ícone + texto).
+Componentes visuais do Sinfonia (fonte grande, alto contraste, cor + ícone + texto).
 
-Visual "clínico institucional": faixa de cabeçalho azul-petróleo, fundo cinza-azulado
-claro e blocos brancos. Pensado para tablet ou TV do setor e para quem tem pouca
-familiaridade com tecnologia.
+Identidade visual tirada do logo do Sinfonia (azul-marinho + verde-azulado), com
+acabamento inspirado em sites de hospitais: barra superior fina, cabeçalho branco com
+a marca, muito espaço em branco, cartões suaves e rodapé institucional.
+Pensado para tablet ou TV do setor e para quem tem pouca familiaridade com tecnologia.
 """
 from __future__ import annotations
 
+import base64
 import html
+from datetime import date
+from functools import lru_cache
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -17,11 +22,19 @@ from dados import A_CONFIRMAR, ROTULO
 
 AVISO = "Protótipo com dados sintéticos. Não substitui decisão clínica nem o sistema Tasy."
 
-# Cores da identidade visual
-PETROLEO = "#0b4f63"  # cabeçalho, abas selecionadas, cabeçalho das tabelas
+NOME_APP = "Sinfonia"
+PASTA_IMG = Path(__file__).resolve().parent / "img"
+LOGO = PASTA_IMG / "sinfonia-logo.png"
+ICONE = PASTA_IMG / "sinfonia-icone.png"
+
+# Cores da identidade visual (tiradas do logo; contraste conferido pela WCAG)
+MARINHO = "#19375d"  # cabeçalho, abas, títulos, tabelas (12:1 no branco)
+TEAL = "#08756e"  # destaques e a "proposta" nos gráficos (5,6:1 no branco)
+TEAL_CLARO = "#e3f2f0"
+FUNDO = "#f4f7f9"
 TEXTO = "#102a33"  # texto principal (contraste > 13:1 no branco)
 TEXTO_2 = "#3d5560"  # texto secundário (contraste > 7:1 no branco)
-BORDA = "#d5dfe5"
+BORDA = "#dde5ea"
 
 # Cores dos grupos, iguais às da folha do setor. Vermelho x verde se confundem para
 # daltônicos (validado: não há tom que resolva sem mudar as cores do setor), então a cor
@@ -45,14 +58,15 @@ HACHURA_PERFIL = {
 CORES_ROTULO = {ROTULO[g]: c for g, c in CORES_PERFIL.items()}
 HACHURA_ROTULO = {ROTULO[g]: h for g, h in HACHURA_PERFIL.items()}
 # Cores dos cenários nos gráficos (mesma ordem fixa da paleta)
-COR_HOJE, COR_PROPOSTA = "#2a78d6", "#eb6834"
+# Hoje em cinza (o jeito antigo) e a proposta na cor da marca
+COR_HOJE, COR_PROPOSTA = "#5f6f7e", TEAL
 
 # Situação da poltrona: ícone, texto, cor forte (borda) e tinta clara (fundo do selo)
 # (cores diferentes das dos grupos para não confundir situação com tipo de tratamento)
 SITUACAO_POLTRONA = {
     P.LIVRE: ("✅", "Livre", "#52606b", "#f1f4f6"),
     P.AGUARDANDO: ("⏳", "Aguardando bolsa", "#b27600", "#fff5dc"),
-    P.INFUSAO: ("💧", "Em infusão", PETROLEO, "#e3f1f5"),
+    P.INFUSAO: ("💧", "Em infusão", MARINHO, "#e6edf6"),
     P.ALTA: ("🚪", "Em alta", "#4a3aa7", "#efebff"),
 }
 ESPERA_LONGA = ("⚠️", "Espera longa", "#c62828", "#fdeaea")
@@ -66,58 +80,79 @@ ICONE_BOLSA = {
 
 CSS = f"""
 <style>
-/* ---------- Base: fonte grande e alto contraste ---------- */
-.stApp {{ background: #eef3f6; }}
+/* ---------- Base: fonte grande, alto contraste e Open Sans ---------- */
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap');
+.stApp {{ background: {FUNDO}; }}
+.stApp, .stApp p, .stApp li, .stApp label, .stApp td, .stApp th, .stApp input, .stApp button,
+.stApp h1, .stApp h2, .stApp h3, .stApp [data-testid="stMarkdownContainer"] div,
+.stApp [data-testid="stCaptionContainer"] {{ font-family: 'Open Sans', system-ui, sans-serif; }}
 .stApp p, .stApp li, .stApp label, .stApp td, .stApp th, .stApp input,
 .stApp [data-testid="stCaptionContainer"] {{ font-size: 20px !important; }}
 .stApp h1, .stApp h1 * {{ font-size: 36px !important; font-weight: 800 !important; }}
 .stApp h2, .stApp h2 * {{ font-size: 30px !important; font-weight: 800 !important; }}
-.stApp h3, .stApp h3 * {{ font-size: 25px !important; font-weight: 800 !important; color: {PETROLEO}; }}
+.stApp h3, .stApp h3 * {{ font-size: 24px !important; font-weight: 700 !important; color: {MARINHO};
+                          letter-spacing: -.2px; }}
 .stApp p, .stApp li, .stApp label {{ color: {TEXTO}; }}
 .block-container {{ padding-top: 2.2rem !important; max-width: 1400px; }}
 
-/* ---------- Cabeçalho institucional ---------- */
+/* ---------- Barra superior fina (como nos sites de hospital) ---------- */
+.topo {{
+  background: {MARINHO}; color: #fff; border-radius: 14px 14px 0 0; padding: 8px 22px;
+  display: flex; gap: 22px; flex-wrap: wrap; align-items: center; font-size: 17px; font-weight: 600;
+}}
+.topo .dir {{ margin-left: auto; background: {TEAL}; border-radius: 999px; padding: 2px 14px; }}
+
+/* ---------- Cabeçalho com a marca ---------- */
 .cabecalho {{
-  background: linear-gradient(90deg, {PETROLEO} 0%, #0e6f86 100%);
-  color: #fff; border-radius: 16px; padding: 18px 24px; margin-bottom: 12px;
-  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
-  box-shadow: 0 4px 12px rgba(11, 79, 99, .25);
+  background: #fff; border: 1px solid {BORDA}; border-top: none; border-radius: 0 0 14px 14px;
+  padding: 14px 22px; margin-bottom: 12px; display: flex; align-items: center; gap: 18px;
+  flex-wrap: wrap; box-shadow: 0 6px 18px rgba(25, 55, 93, .08);
 }}
-.cabecalho .marca {{
-  width: 58px; height: 58px; border-radius: 14px; background: #fff; color: {PETROLEO};
-  font-size: 38px; font-weight: 900; display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}}
-.cabecalho .titulo {{ font-size: 30px; font-weight: 800; line-height: 1.15; }}
-.cabecalho .sub {{ font-size: 19px; opacity: .95; margin-top: 2px; }}
-.cabecalho .selo {{
-  margin-left: auto; border: 2px solid #fff; border-radius: 999px; padding: 6px 16px;
-  font-size: 18px; font-weight: 700; background: rgba(255, 255, 255, .12);
+.cabecalho img {{ height: 72px; width: auto; flex-shrink: 0; }}
+.cabecalho .titulo {{ font-size: 34px; font-weight: 800; color: {MARINHO}; line-height: 1.05;
+                      letter-spacing: -.5px; }}
+.cabecalho .sub {{ font-size: 19px; color: {TEAL}; font-weight: 700; margin-top: 2px; }}
+.cabecalho .chips {{ margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }}
+.cabecalho .chip {{
+  background: {FUNDO}; border: 1px solid {BORDA}; color: {TEXTO}; border-radius: 999px;
+  padding: 6px 14px; font-size: 17px; font-weight: 700; white-space: nowrap;
 }}
 
 /* ---------- Aviso fixo no topo ---------- */
 .aviso-fixo {{
   position: sticky; top: 3.2rem; z-index: 999;
-  background: #fff8e6; color: #3d2a00; border: 2px solid #e2b54a; border-left: 10px solid #b27600;
-  border-radius: 12px; padding: 10px 16px; font-size: 20px; font-weight: 700; margin-bottom: 14px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, .08);
+  background: #fff8e6; color: #3d2a00; border: 1px solid #e2b54a; border-left: 8px solid #b27600;
+  border-radius: 12px; padding: 10px 16px; font-size: 19px; font-weight: 700; margin-bottom: 16px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .06);
 }}
 
-/* ---------- Abas em formato de pílula ---------- */
-.stTabs [role="tablist"] {{ gap: 10px; border-bottom: none !important; flex-wrap: wrap; }}
+/* ---------- Abas ---------- */
+.stTabs [role="tablist"] {{ gap: 8px; border-bottom: none !important; flex-wrap: wrap; }}
 .stTabs [role="tab"] {{
-  background: #fff; border: 2px solid #b9cbd4 !important; border-radius: 999px;
-  padding: 10px 24px !important; height: auto !important;
+  background: #fff; border: 1px solid {BORDA} !important; border-radius: 12px;
+  padding: 10px 16px !important; height: auto !important; box-shadow: 0 1px 3px rgba(25, 55, 93, .06);
 }}
-.stTabs [role="tab"] p {{ font-size: 22px !important; font-weight: 700 !important; color: {PETROLEO}; }}
-.stTabs [role="tab"][aria-selected="true"] {{ background: {PETROLEO}; border-color: {PETROLEO} !important; }}
+.stTabs [role="tab"]:hover {{ border-color: {TEAL} !important; }}
+.stTabs [role="tab"] p {{ font-size: 20px !important; font-weight: 700 !important; color: {MARINHO}; }}
+.stTabs [role="tab"][aria-selected="true"] {{ background: {MARINHO}; border-color: {MARINHO} !important;
+                                              box-shadow: inset 0 -5px 0 {TEAL}; }}
 .stTabs [role="tab"][aria-selected="true"] p {{ color: #fff !important; }}
 .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] {{ display: none; }}
+
+/* ---------- Rodapé institucional ---------- */
+.rodape {{
+  margin-top: 28px; background: {MARINHO}; color: #dfe7f1; border-radius: 14px;
+  padding: 18px 24px; display: flex; gap: 24px; flex-wrap: wrap; align-items: center;
+  font-size: 17px; line-height: 1.5;
+}}
+.rodape b {{ color: #fff; }}
+.rodape .marca {{ font-size: 22px; font-weight: 800; color: #fff; }}
+.rodape .col {{ flex: 1 1 260px; }}
 
 /* ---------- Blocos brancos (st.container com chave "bloco_...") ---------- */
 [class*="st-key-bloco"], [data-testid="stForm"] {{
   background: #fff; border: 1px solid {BORDA}; border-radius: 16px;
-  padding: 18px 22px 22px; box-shadow: 0 2px 6px rgba(16, 42, 51, .07);
+  padding: 20px 24px 24px; box-shadow: 0 4px 14px rgba(25, 55, 93, .06);
 }}
 
 /* ---------- Botões grandes ---------- */
@@ -126,8 +161,8 @@ CSS = f"""
 }}
 .stButton button p, .stDownloadButton button p, .stFormSubmitButton button p,
 [data-testid="stPopover"] button p {{ font-size: 20px !important; font-weight: 700; }}
-[data-testid="stPopover"] button {{ border-color: #9fb6c1; background: #f5f9fb; }}
-[data-testid="stPopover"] button p {{ color: {PETROLEO} !important; }}
+[data-testid="stPopover"] button {{ border-color: {BORDA}; background: {TEAL_CLARO}; }}
+[data-testid="stPopover"] button p {{ color: {MARINHO} !important; }}
 .stApp [data-testid*="primary"] p, .stApp [kind*="primary"] p {{ color: #ffffff !important; }}
 
 /* ---------- Cartões de resumo (números grandes) ---------- */
@@ -149,7 +184,7 @@ CSS = f"""
 .resumo.empilhado .kpi {{ flex-direction: column; align-items: flex-start; gap: 8px; }}
 
 /* ---------- Mapa das poltronas ---------- */
-.grade {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }}
+.grade {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 12px; }}
 .poltrona {{
   background: #fff; border: 1px solid {BORDA}; border-left: 10px solid var(--cor);
   border-radius: 12px; padding: 10px 12px; color: {TEXTO}; line-height: 1.35;
@@ -159,7 +194,8 @@ CSS = f"""
 .poltrona .num {{ font-size: 18px; font-weight: 800; color: {TEXTO_2}; letter-spacing: .3px; }}
 .poltrona .selo {{
   display: inline-block; background: var(--tinta); border: 2px solid var(--cor);
-  border-radius: 999px; padding: 2px 12px; margin: 6px 0; font-size: 19px; font-weight: 800;
+  border-radius: 999px; padding: 2px 12px; margin: 6px 0; font-size: 18px; font-weight: 800;
+  white-space: nowrap;
 }}
 .poltrona .det {{ font-size: 18px; }}
 .grupo {{ display: inline-flex; align-items: flex-start; gap: 6px; font-size: 17px; font-weight: 700;
@@ -182,13 +218,39 @@ CSS = f"""
 .rem-titulo {{ font-size: 20px; font-weight: 800; color: {TEXTO_2}; text-transform: uppercase; }}
 .rem-num {{ font-size: 56px; font-weight: 900; line-height: 1.1; }}
 .rem-texto {{ font-size: 20px; font-weight: 600; }}
-.rem-seta {{ align-self: center; font-size: 40px; color: {PETROLEO}; }}
+.rem-seta {{ align-self: center; font-size: 40px; color: {TEAL}; }}
 .rem-nota {{ margin-top: 12px; font-size: 19px; color: {TEXTO}; }}
+
+/* ---------- Dashboard "O que melhorou" ---------- */
+.impacto {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }}
+.imp {{ background: #fff; border: 1px solid {BORDA}; border-top: 6px solid var(--cor);
+        border-radius: 16px; padding: 16px 18px; box-shadow: 0 4px 14px rgba(25, 55, 93, .06); }}
+.imp .ic {{ font-size: 28px; }}
+.imp .num {{ font-size: 44px; font-weight: 800; color: {MARINHO}; line-height: 1.1; letter-spacing: -1px; }}
+.imp .txt {{ font-size: 19px; font-weight: 700; color: {TEXTO}; }}
+.imp .det {{ font-size: 17px; color: {TEXTO_2}; margin-top: 4px; }}
+.historias {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }}
+.hist {{ background: #fff; border: 1px solid {BORDA}; border-radius: 16px; padding: 16px 18px;
+         box-shadow: 0 4px 14px rgba(25, 55, 93, .06); color: {TEXTO}; }}
+.hist .quem {{ display: flex; justify-content: space-between; align-items: center; gap: 8px;
+               font-size: 20px; font-weight: 800; color: {MARINHO}; flex-wrap: wrap; }}
+.hist .antes-depois {{ display: flex; align-items: stretch; gap: 10px; margin: 12px 0 8px; }}
+.hist .caixa {{ flex: 1 1 0; min-width: 0; border-radius: 12px; padding: 8px 12px; }}
+.hist .caixa.hoje {{ background: #f1f3f5; border: 1px solid #cfd6dc; }}
+.hist .caixa.prop {{ background: {TEAL_CLARO}; border: 1px solid #9fd0c9; }}
+.hist .rot {{ font-size: 16px; font-weight: 700; color: {TEXTO_2}; text-transform: uppercase; }}
+.hist .val {{ font-size: 28px; font-weight: 800; white-space: nowrap; }}
+.hist .val.palavra {{ font-size: 21px; white-space: normal; }}
+.hist .seta {{ font-size: 28px; color: {TEAL}; align-self: center; }}
+.hist .ganho {{ display: inline-block; background: {TEAL}; color: #fff; border-radius: 999px;
+                padding: 4px 14px; font-size: 19px; font-weight: 800; }}
+.hist .ganho.neutro {{ background: #5f6f7e; }}
+.hist .frase {{ font-size: 18px; margin-top: 8px; }}
 
 /* ---------- Tabelas ---------- */
 .tabela-grande {{ width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid {BORDA};
                  border-radius: 12px; overflow: hidden; }}
-.tabela-grande th {{ background: {PETROLEO}; color: #fff !important; text-align: left; padding: 12px; }}
+.tabela-grande th {{ background: {MARINHO}; color: #fff !important; text-align: left; padding: 12px; }}
 .tabela-grande td {{ padding: 11px 12px; border-bottom: 1px solid #e3eaee; color: {TEXTO}; background: #fff; }}
 .tabela-grande tr:nth-child(even) td {{ background: #f5f8fa; }}
 .tabela-grande tr:last-child td {{ border-bottom: none; }}
@@ -201,14 +263,42 @@ def aplicar_estilo():
     st.markdown(CSS, unsafe_allow_html=True)
 
 
-def cabecalho(subtitulo: str):
-    """Faixa institucional do topo com o aviso fixo logo abaixo."""
+@lru_cache(maxsize=4)
+def imagem_base64(caminho: Path) -> str:
+    """Imagem embutida no HTML (o Streamlit não serve arquivos locais direto no markdown)."""
+    return base64.b64encode(caminho.read_bytes()).decode()
+
+
+def cabecalho(subtitulo: str, chips: list[str], data_do_dia: date | None = None):
+    """Barra superior fina + cabeçalho branco com a marca Sinfonia + aviso fixo."""
+    dia = (data_do_dia or date.today()).strftime("%d/%m/%Y")
+    # No cabeçalho vai só o símbolo: o nome "Sinfonia" já aparece escrito ao lado
+    logo = (f'<img src="data:image/png;base64,{imagem_base64(ICONE)}" alt="Símbolo do {NOME_APP}">'
+            if ICONE.exists() else "")
     st.markdown(
-        f'<div class="cabecalho" role="banner"><div class="marca" aria-hidden="true">✚</div>'
-        f'<div><div class="titulo">Unidade de Quimioterapia</div>'
+        f'<div class="topo" role="banner"><span>🗓️ {dia}</span>'
+        f'<span>Unidade de Quimioterapia</span>'
+        f'<span class="dir">Protótipo · Ideathon CBEB 2026</span></div>'
+        f'<div class="cabecalho">{logo}'
+        f'<div><div class="titulo">{NOME_APP}</div>'
         f'<div class="sub">{html.escape(subtitulo)}</div></div>'
-        f'<div class="selo">Protótipo · Ideathon CBEB 2026</div></div>'
+        f'<div class="chips">{"".join(f"<span class=chip>{html.escape(c)}</span>" for c in chips)}'
+        f'</div></div>'
         f'<div class="aviso-fixo" role="alert">⚠️ {AVISO}</div>',
+        unsafe_allow_html=True)
+
+
+def rodape():
+    """Rodapé institucional: avisos do protótipo e da LGPD."""
+    st.markdown(
+        f'<div class="rodape" role="contentinfo">'
+        f'<div class="col"><div class="marca">{NOME_APP}</div>'
+        f'Fluxo da quimioterapia em harmonia: a bolsa pronta quando o paciente senta.</div>'
+        f'<div class="col"><b>Protótipo com dados sintéticos.</b> Pacientes fictícios '
+        f'(PAC-001, PAC-002...). Não substitui decisão clínica nem o sistema Tasy.</div>'
+        f'<div class="col"><b>Privacidade (LGPD):</b> nenhum dado real ou sensível de paciente é '
+        f'usado ou armazenado. Tempos de preparo e infusão são informados pelo hospital.</div>'
+        f'</div>',
         unsafe_allow_html=True)
 
 
@@ -314,6 +404,45 @@ def destaque_remarcacoes(hoje: int, proposta: int, atend_hoje: int, atend_prop: 
         + f'</div><div class="rem-nota">Na proposta, todo paciente chega à triagem pelo menos '
           f'<b>{folga} min</b> antes do horário limite do protocolo.</div>',
         unsafe_allow_html=True)
+
+
+def cartoes_impacto(itens: list[tuple[str, str, str, str, str]]):
+    """Números de impacto: (ícone, número, texto, detalhe, cor da borda)."""
+    html_itens = "".join(
+        f'<div class="imp" style="--cor:{cor}"><div class="ic" aria-hidden="true">{ic}</div>'
+        f'<div class="num">{html.escape(num)}</div><div class="txt">{html.escape(txt)}</div>'
+        f'<div class="det">{html.escape(det)}</div></div>'
+        for ic, num, txt, det, cor in itens)
+    st.markdown(f'<div class="impacto">{html_itens}</div>', unsafe_allow_html=True)
+
+
+def _classe_valor(texto: str) -> str:
+    """Números ('2h05') em fonte grande; palavras ('Remarcado') um pouco menores."""
+    return "val" if texto[:1].isdigit() else "val palavra"
+
+
+def cartoes_historia(historias: list[dict]):
+    """Histórias de pacientes fictícios: antes (hoje) x depois (proposta).
+
+    Cada item: paciente, grupo, hoje (texto), proposta (texto), selo (texto), frase,
+    e neutro=True quando não há ganho a destacar.
+    """
+    partes = []
+    for h in historias:
+        classe = "ganho neutro" if h.get("neutro") else "ganho"
+        partes.append(
+            f'<div class="hist"><div class="quem"><span>{html.escape(h["paciente"])}</span>'
+            f'{selo_grupo(h["grupo"])}</div>'
+            f'<div class="antes-depois">'
+            f'<div class="caixa hoje"><div class="rot">Hoje</div>'
+            f'<div class="{_classe_valor(h["hoje"])}">{html.escape(h["hoje"])}</div></div>'
+            f'<div class="seta" aria-hidden="true">➜</div>'
+            f'<div class="caixa prop"><div class="rot">Com o Sinfonia</div>'
+            f'<div class="{_classe_valor(h["proposta"])}">{html.escape(h["proposta"])}</div>'
+            f'</div></div>'
+            f'<span class="{classe}">{html.escape(h["selo"])}</span>'
+            f'<div class="frase">{html.escape(h["frase"])}</div></div>')
+    st.markdown(f'<div class="historias">{"".join(partes)}</div>', unsafe_allow_html=True)
 
 
 def tabela(df: pd.DataFrame):

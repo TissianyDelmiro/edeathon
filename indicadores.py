@@ -156,3 +156,29 @@ def poltronas_por_hora(ag: pd.DataFrame, prem: Premissas) -> pd.DataFrame:
         linhas.append({"hora": h, "poltronas": int(sent[fatia].max()),
                        "na_unidade": int(unid[fatia].max())})
     return pd.DataFrame(linhas)
+
+
+def ociosidade_por_hora(ag: pd.DataFrame, prem: Premissas) -> pd.DataFrame:
+    """Ociosidade média em cada hora do turno.
+
+    - poltronas_ociosas:   poltronas vazias (média da hora);
+    - poltronas_sem_tratar: poltronas ocupadas por paciente que NÃO está em infusão
+                            (esperando a bolsa ou esperando a alta): desperdício "escondido";
+    - capela_ociosa:       % da capacidade da capela parada.
+    """
+    t0, t1 = prem.inicio_turno, prem.fim_turno
+    at = ag.dropna(subset=["inicio_infusao"])
+    ocupadas = _ocupacao_por_minuto(at["senta"], at["sai"], t0, t1)
+    esperando = _ocupacao_por_minuto(at["senta"], at["inicio_infusao"], t0, t1)
+    em_alta = _ocupacao_por_minuto(at["fim_infusao"], at["sai"], t0, t1)
+    preparo = _ocupacao_por_minuto(at["inicio_preparo"], at["fim_preparo"], t0, t1)
+    linhas = []
+    for i, h in enumerate(range(t0, t1, 60)):
+        fatia = slice(i * 60, min(i * 60 + 60, t1 - t0))
+        linhas.append({
+            "hora": h,
+            "poltronas_ociosas": float(prem.n_poltronas - ocupadas[fatia].mean()),
+            "poltronas_sem_tratar": float((esperando[fatia] + em_alta[fatia]).mean()),
+            "capela_ociosa": float(100 * (1 - preparo[fatia].mean() / prem.capacidade_capela)),
+        })
+    return pd.DataFrame(linhas)
