@@ -73,20 +73,22 @@ def test_duracoes_nao_alteradas(resultado):
 def test_capela_suavizada(resultado):
     """A capela fica mais equilibrada que hoje.
 
-    Com a prioridade dos pacientes do interior (que chegam cedo no transporte), a manhã
-    fica um pouco mais carregada: o pico pode chegar a 1,6x a média por hora, mas fica
-    abaixo da capacidade e bem abaixo do pico de hoje (capela lotada de manhã).
+    Os pacientes do interior chegam cedo e têm prioridade (espera máxima até sentar), então
+    a capela trabalha bastante de manhã. O que se garante: nunca passa da capacidade, fica
+    lotada por MENOS horas que hoje e faz MAIS trabalho à tarde que hoje.
     """
     prem, dia, r = resultado
-    ag = r["agenda"]
-    por_hora = ag.groupby((ag["inicio_preparo"] - prem.inicio_turno) // 60)["preparo_min"].sum()
-    media = ag["preparo_min"].sum() / 11
-    assert por_hora.max() <= 1.6 * media
-    assert por_hora.max() < 60 * prem.capacidade_capela
     hoje = simular_atual(dia, prem)
-    pico_hoje = hoje.groupby((hoje["inicio_preparo"] - prem.inicio_turno) // 60)[
-        "preparo_min"].sum().max()
-    assert por_hora.max() < pico_hoje
+
+    def por_hora(ag):
+        return ag.groupby((ag["inicio_preparo"] - prem.inicio_turno) // 60)["preparo_min"].sum()
+
+    capacidade = 60 * prem.capacidade_capela
+    prop, atual = por_hora(r["agenda"]), por_hora(hoje)
+    assert prop.max() <= capacidade
+    assert (prop >= 0.95 * capacidade).sum() < (atual >= 0.95 * capacidade).sum()
+    tarde = 6  # horas do turno a partir das 13h
+    assert prop[prop.index >= tarde].sum() > atual[atual.index >= tarde].sum()
 
 
 def test_paciente_que_nao_cabe_fica_fora():

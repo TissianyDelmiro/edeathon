@@ -240,7 +240,7 @@ CSS = f"""
 .hist .caixa.prop {{ background: {TEAL_CLARO}; border: 1px solid #9fd0c9; }}
 .hist .rot {{ font-size: 16px; font-weight: 700; color: {TEXTO_2}; text-transform: uppercase; }}
 .hist .val {{ font-size: 28px; font-weight: 800; white-space: nowrap; }}
-.hist .val.palavra {{ font-size: 21px; white-space: normal; }}
+.hist .val.palavra {{ font-size: 16px; white-space: nowrap; line-height: 2.1; }}
 .hist .seta {{ font-size: 28px; color: {TEAL}; align-self: center; }}
 .hist .ganho {{ display: inline-block; background: {TEAL}; color: #fff; border-radius: 999px;
                 padding: 4px 14px; font-size: 19px; font-weight: 800; }}
@@ -265,7 +265,8 @@ CSS = f"""
 .fl-corpo {{ max-height: 32vh; overflow-y: auto; padding: 0 12px 12px; }}
 .fl-item {{ font-size: 17px; font-weight: 600; color: {TEXTO}; padding: 6px 10px; margin-top: 6px;
             border-radius: 10px; background: #f5f8fa; border-left: 5px solid #b27600; }}
-.fl-item[data-tipo="remarcado"], .fl-item[data-tipo="espera"] {{ border-left-color: #c62828; }}
+.fl-item[data-tipo="remarcado"], .fl-item[data-tipo="espera"],
+.fl-item[data-tipo="transporte"] {{ border-left-color: #c62828; }}
 .fl-item[data-tipo="alta"] {{ border-left-color: #4a3aa7; }}
 .fl-item.novo {{ animation: fl-entrar .7s ease-out; background: #fff8e6; }}
 .fl-selo {{ background: {TEAL}; color: #fff; border-radius: 999px; padding: 1px 8px;
@@ -470,10 +471,12 @@ NOTIFICACAO = {
     "remarcado": ("❌", "infinite"),
     "espera": ("⚠️", "long"),
     "limite": ("⚠️", "long"),
+    "transporte": ("🚐", "infinite"),  # fica até ser fechado: é o mais difícil de remediar
     "alta": ("🔔", "long"),
 }
 MAX_NOTIFICACOES = 3  # por vez, para não poluir a tela
-ICONE_ALERTA = {"remarcado": "❌", "espera": "⚠️", "limite": "⚠️", "alta": "🔔"}
+ICONE_ALERTA = {"remarcado": "❌", "espera": "⚠️", "limite": "⚠️", "alta": "🔔",
+                "transporte": "🚐"}
 
 
 def notificar_novos(alertas: list[dict], contexto: str) -> set[str]:
@@ -592,6 +595,8 @@ def caixa_alerta(tipo: str, texto: str):
         icone, cor, tinta = "⚠️", "#b27600", "#fff5dc"
     elif tipo == "remarcado":
         icone, cor, tinta = "❌", ESPERA_LONGA[2], ESPERA_LONGA[3]
+    elif tipo == "transporte":
+        icone, cor, tinta = "🚐", ESPERA_LONGA[2], ESPERA_LONGA[3]
     elif tipo == "ok":
         icone, cor, tinta = "✅", *OK
     else:

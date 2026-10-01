@@ -19,6 +19,8 @@ Restrições:
   `folga_limite` minutos antes do limite (zero remarcações por prazo);
 - pacientes do interior: chegam com o transporte da prefeitura (não dá para marcar outro
   horário) e precisam liberar a poltrona até `folga_transporte` minutos antes do retorno;
+  a espera da chegada do transporte até sentar passa de `espera_max_interior` só se não houver
+  outro jeito (penalidade forte);
 - tudo dentro do turno.
 
 Objetivo (soma ponderada, em ordem de importância):
@@ -51,6 +53,9 @@ PESO_PICO_CAPELA = 20  # por minuto de preparo na hora mais carregada da capela
 PESO_ESPERA = 10  # por minuto de espera do paciente na poltrona
 PESO_BOLSA_PARADA = 1  # por minuto de bolsa pronta aguardando
 PESO_INTERIOR = 1  # por minuto de paciente do interior na unidade (da chegada do transporte)
+# Por minuto que o paciente do interior espera ALÉM da espera máxima até sentar. É maior que
+# o peso do pico da capela: equilibrar a capela não pode deixar alguém horas na recepção.
+PESO_ESPERA_INTERIOR_EXCESSO = 50
 
 STATUS_PT = {
     cp_model.OPTIMAL: "Solução ótima encontrada",
@@ -73,6 +78,7 @@ def otimizar(dia: pd.DataFrame, prem: Premissas, limite_s: float = 20.0) -> dict
     iv_capela, dem_capela, iv_poltrona = [], [], []
     horas_prep = []  # por paciente: lista de booleanos "preparo começa na hora h"
     tempo_interior = []  # minutos na unidade de cada paciente do interior
+    excesso_interior = []  # minutos de espera do interior além do máximo até sentar
 
     for i, r in dia.reset_index(drop=True).iterrows():
         prep, inf = int(r["preparo_min"]), int(r["infusao_min"])
@@ -122,6 +128,10 @@ def otimizar(dia: pd.DataFrame, prem: Premissas, limite_s: float = 20.0) -> dict
             m.add(t_int == sai - chega_t).only_enforce_if(x)
             m.add(t_int == 0).only_enforce_if(x.Not())
             tempo_interior.append(t_int)
+            # Espera da chegada do transporte até sentar além do máximo (penalidade forte)
+            exc = m.new_int_var(0, fim - ini + 120, f"excesso_espera_interior_{i}")
+            m.add(exc >= senta - chega_t - prem.espera_max_interior).only_enforce_if(x)
+            excesso_interior.append(exc)
 
         # Hora do turno em que o preparo começa (para medir a carga da capela por hora)
         hora = m.new_int_var(0, n_horas - 1, f"hora_prep_{i}")
@@ -166,7 +176,8 @@ def otimizar(dia: pd.DataFrame, prem: Premissas, limite_s: float = 20.0) -> dict
         parada.append(p)
     m.minimize(PESO_FORA_DO_TURNO * sum(fora) + PESO_PICO_CAPELA * pico
                + PESO_ESPERA * sum(espera) + PESO_BOLSA_PARADA * sum(parada)
-               + PESO_INTERIOR * sum(tempo_interior))
+               + PESO_INTERIOR * sum(tempo_interior)
+               + PESO_ESPERA_INTERIOR_EXCESSO * sum(excesso_interior))
 
     # Resolver
     solver = cp_model.CpSolver()

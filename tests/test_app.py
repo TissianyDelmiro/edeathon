@@ -138,3 +138,11 @@ def test_kanban_no_painel():
     for coluna in ("📅 Agendado", "🚪 Chegou", "💧 Em infusão", "✅ Concluído"):
         assert coluna in html_kb
     assert "Poltronas ocupadas" in html_kb and "Capela preparando" in html_kb
+
+
+def test_historias_sem_paciente_repetido():
+    at = _rodar()
+    import re
+    html_hist = " ".join(m.value for m in at.markdown if 'class="historias"' in m.value)
+    ids = re.findall(r'<div class="quem"><span>(PAC-\d{3})', html_hist)
+    assert ids and len(ids) == len(set(ids)), ids

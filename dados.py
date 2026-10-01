@@ -122,6 +122,7 @@ class Premissas:
     transporte_volta_de: int = 15 * 60  # e volta para o interior entre...
     transporte_volta_ate: int = 16 * 60 + 30  # ...15h00 e 16h30
     folga_transporte: int = 30  # proposta: liberar a poltrona X min antes do retorno
+    espera_max_interior: int = 120  # proposta: espera máxima da chegada do transporte até sentar
     # Tempos de processo (minutos)
     alta_atual: int = 15  # do fim da infusão até liberar a poltrona no Tasy (hoje)
     alta_antecipada: int = 5  # idem, com a alta preparada antes do fim da infusão

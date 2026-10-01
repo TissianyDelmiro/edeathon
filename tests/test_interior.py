@@ -107,3 +107,65 @@ def test_tempo_do_interior_conta_desde_o_transporte():
     j = jornada(hoje, hoje).set_index("paciente")
     pac = hoje[hoje["interior"] & ~hoje["remarcado"]].iloc[0]
     assert j.loc[pac["paciente"], "tempo_hoje"] == pac["sai"] - pac["chegada_transporte"]
+
+
+# ---------------------------------------------------------------------------
+# Fase 4: alerta de transporte, imprevisto de transporte e dashboard
+# ---------------------------------------------------------------------------
+import ocorrencias as O  # noqa: E402
+import painel as P  # noqa: E402
+
+
+def test_alerta_de_transporte_antes_e_depois_do_retorno():
+    prem = Premissas()
+    hoje = simular_atual(gerar_dia(prem), prem)
+    pac = hoje[perdeu_transporte(hoje)].iloc[0]
+    def tipos_do(t):
+        return [a for a in P.alertas(hoje, t, prem.folga_transporte)
+                if a["tipo"] == "transporte" and pac["paciente"] in a["id"]]
+    # Mais de 2 h antes do retorno: ainda não avisa
+    assert not tipos_do(pac["retorno_min"] - 150) or pac["chegada"] > pac["retorno_min"] - 150
+    antes = tipos_do(max(pac["chegada"], pac["retorno_min"] - 60))
+    depois = tipos_do(pac["retorno_min"] + 10)
+    assert antes and "transporte às" in antes[0]["curto"]
+    assert depois and "perdeu o transporte" in depois[0]["curto"]
+    assert len(depois[0]["curto"]) <= 60
+
+
+def test_sem_alerta_de_transporte_na_proposta(proposta):
+    prem, _, r = proposta
+    for t in range(prem.inicio_turno, prem.fim_turno, 15):
+        assert not [a for a in P.alertas(r["agenda"], t, prem.folga_transporte)
+                    if a["tipo"] == "transporte"]
+
+
+def test_imprevisto_transporte_muda_o_retorno(proposta):
+    prem, _, r = proposta
+    plano = r["agenda"]
+    pac = plano[plano["interior"].astype(bool)].iloc[0]
+    novo = pac["sai"] - 20  # transporte vai sair antes da alta
+    oc = {"paciente": pac["paciente"], "tipo": "transporte", "valor": novo}
+    assert O.validar(oc, plano) is None
+    real = O.aplicar(plano, [oc], prem.alta_antecipada)
+    assert perdeu_transporte(real).sum() == 1
+    capital = plano[~plano["interior"].astype(bool)].iloc[0]
+    erro = O.validar({"paciente": capital["paciente"], "tipo": "transporte", "valor": 900},
+                     plano)
+    assert erro and "não é do interior" in erro
+
+
+def test_jornada_marca_quem_perderia_o_transporte(proposta):
+    prem, dia, r = proposta
+    hoje = simular_atual(dia, prem)
+    j = jornada(hoje, r["agenda"])
+    assert j["perdeu_transporte_hoje"].sum() == perdeu_transporte(hoje).sum()
+    assert not j["perdeu_transporte_proposta"].any()
+
+
+def test_espera_maxima_do_interior_ate_sentar(proposta):
+    """Equilibrar a capela não pode deixar paciente do interior horas na recepção."""
+    prem, _, r = proposta
+    intr = r["agenda"][r["agenda"]["interior"].astype(bool)]
+    espera = intr["senta"] - intr["chegada_transporte"]
+    # Penalidade forte (não regra rígida): tolera um slot de 10 min de folga
+    assert espera.max() <= prem.espera_max_interior + 10

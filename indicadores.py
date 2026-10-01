@@ -93,6 +93,8 @@ def calcular_kpis(ag: pd.DataFrame, prem: Premissas, alta: int) -> dict:
 # (chave, nome na tela, unidade, "maior é melhor?")
 INDICADORES = [
     ("remarcados", "Pacientes remarcados por perder o horário limite", "pacientes", False),
+    ("interior_perdeu_transporte", "Pacientes do interior que perdem o transporte",
+     "pacientes", False),
     ("pacientes_atendidos", "Pacientes atendidos no dia", "pacientes", True),
     ("horas_qt", "Horas de quimioterapia no turno", "h", True),
     ("horas_sem_tratamento", "Horas de poltrona sem tratamento (espera + alta)", "h", False),

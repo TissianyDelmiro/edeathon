@@ -6,7 +6,8 @@ Tipos de registro (apenas o que ACONTECEU; o sistema não toma nenhuma decisão 
              protocolo, o paciente é remarcado (não dá mais para manipular no dia);
 - "falta":   o paciente não veio. A poltrona fica livre e a bolsa sai da fila da capela;
 - "bolsa":   a bolsa atrasou X minutos (ex.: devolução, falta de insumo);
-- "termino": hora REAL de término da infusão informada pela enfermagem.
+- "termino": hora REAL de término da infusão informada pela enfermagem;
+- "transporte": o transporte do interior avisou um novo horário de volta.
 
 Recalcular o dia (sem replanejar): cada paciente continua na poltrona planejada. Se o
 paciente anterior daquela poltrona sair mais tarde, o próximo espera na recepção.
@@ -22,6 +23,7 @@ TIPOS = {
     "falta": "🚫 Paciente faltou",
     "bolsa": "📦 Bolsa atrasou",
     "termino": "💧 Infusão terminou em outro horário",
+    "transporte": "🚐 Transporte mudou o horário de volta",
 }
 TEMPOS = ["senta", "inicio_preparo", "fim_preparo", "bolsa_chega", "inicio_infusao",
           "fim_infusao", "sai"]
@@ -44,6 +46,11 @@ def validar(ocorrencia: dict, plano: pd.DataFrame) -> str | None:
         return "Informe quantos minutos a bolsa atrasou (maior que zero)."
     if tipo == "termino" and (valor is None or valor <= r["inicio_infusao"]):
         return "A hora real de término precisa ser depois do início da infusão."
+    if tipo == "transporte":
+        if not bool(r.get("interior", False)):
+            return f"{r['paciente']} não é do interior (não usa o transporte da prefeitura)."
+        if valor is None:
+            return "Informe o novo horário de volta do transporte."
     return None
 
 
@@ -75,6 +82,8 @@ def aplicar(plano: pd.DataFrame, ocorrencias: list[dict], alta: int) -> pd.DataF
             atraso_bolsa[i] = float(oc["valor"])
         elif oc["tipo"] == "termino":
             termino_real[i] = float(oc["valor"])
+        elif oc["tipo"] == "transporte":
+            ag.at[i, "retorno_min"] = float(oc["valor"])
 
     # Chegou depois do horário limite do protocolo: remarcado para outro dia
     tarde = (chegada_nova > ag["limite_min"]) & ~ag["remarcado"] & ~ag["faltou"]

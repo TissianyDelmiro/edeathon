@@ -31,6 +31,8 @@ def jornada(atual: pd.DataFrame, otim: pd.DataFrame) -> pd.DataFrame:
     """Uma linha por paciente com o tempo na unidade hoje e na proposta."""
     base = atual[["paciente", "perfil", "protocolo", "remarcado"]].rename(
         columns={"remarcado": "remarcado_hoje"})
+    base["interior"] = (atual["interior"].astype(bool).to_numpy() if "interior" in atual.columns
+                        else False)
     for nome, ag in (("hoje", atual), ("proposta", otim)):
         a = ag.set_index("paciente")
         inicio = a["chegada"]
@@ -40,6 +42,11 @@ def jornada(atual: pd.DataFrame, otim: pd.DataFrame) -> pd.DataFrame:
         base[f"espera_{nome}"] = base["paciente"].map(a["inicio_infusao"] - a["senta"])
         base[f"chegada_{nome}"] = base["paciente"].map(a["chegada"])
         base[f"inicio_infusao_{nome}"] = base["paciente"].map(a["inicio_infusao"])
+        base[f"sai_{nome}"] = base["paciente"].map(a["sai"])
+        if "retorno_min" in a.columns:
+            base["retorno_min"] = base["paciente"].map(a["retorno_min"])
+            base[f"perdeu_transporte_{nome}"] = (base["interior"]
+                                                 & (base[f"sai_{nome}"] > base["retorno_min"]))
     base["remarcado_proposta"] = base["tempo_proposta"].isna()
     base["ganho"] = base["tempo_hoje"] - base["tempo_proposta"]
     return base

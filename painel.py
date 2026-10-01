@@ -25,7 +25,10 @@ AVISO_ALTA = 15  # min antes do fim da infusão: preparar a alta
 AVISO_LIMITE = 30  # min antes do horário limite: paciente ainda não chegou à triagem
 
 # Ordem dos alertas na tela (mais urgente primeiro)
-ORDEM_ALERTAS = {"espera": 0, "limite": 1, "remarcado": 2, "alta": 3}
+AVISO_TRANSPORTE = 120  # min antes do retorno: avisar se a poltrona não libera a tempo
+
+# Ordem dos alertas na tela (mais urgente primeiro)
+ORDEM_ALERTAS = {"espera": 0, "transporte": 1, "limite": 2, "remarcado": 3, "alta": 4}
 
 
 def estado_poltronas(ag: pd.DataFrame, t: float, n_poltronas: int) -> pd.DataFrame:
@@ -112,10 +115,32 @@ def fila_capela(ag: pd.DataFrame, t: float) -> pd.DataFrame:
     })
 
 
-def alertas(ag: pd.DataFrame, t: float) -> list[dict]:
-    """Alertas do instante t: espera acima de 30 min, perto do horário limite,
-    remarcado por perder o horário limite e preparar alta."""
+def alertas(ag: pd.DataFrame, t: float, folga_transporte: int = 30) -> list[dict]:
+    """Alertas do instante t: espera acima de 30 min, transporte do interior em risco,
+    perto do horário limite, remarcado por perder o horário limite e preparar alta."""
     lista = []
+    # Interior: a poltrona só libera depois do retorno do transporte (menos a folga)
+    if "interior" in ag.columns:
+        no_dia = ag[ag["interior"].astype(bool) & ag["sai"].notna()]
+        for _, r in no_dia.iterrows():
+            retorno, sai = r["retorno_min"], r["sai"]
+            if not (r["chegada"] <= t < sai) or sai <= retorno - folga_transporte:
+                continue
+            pol = "" if pd.isna(r["poltrona"]) else f" (poltrona {int(r['poltrona'])})"
+            if t >= retorno:
+                lista.append({
+                    "tipo": "transporte", "poltrona": 0, "id": f"transporte:{r['paciente']}",
+                    "curto": f"{r['paciente']} perdeu o transporte das {hhmm(retorno)}",
+                    "texto": f"{r['paciente']}{pol} perdeu o transporte das {hhmm(retorno)}: "
+                             f"a poltrona só libera às {hhmm(sai)}. Acionar o serviço social "
+                             "para a volta ao interior."})
+            elif retorno - t <= AVISO_TRANSPORTE:
+                lista.append({
+                    "tipo": "transporte", "poltrona": 0, "id": f"transporte:{r['paciente']}",
+                    "curto": f"{r['paciente']}: transporte às {hhmm(retorno)}, sai às {hhmm(sai)}",
+                    "texto": f"{r['paciente']}{pol} é do interior: o transporte volta às "
+                             f"{hhmm(retorno)} e a poltrona só libera às {hhmm(sai)}. "
+                             "Priorizar a bolsa e a alta deste paciente."})
     # Horário limite: o paciente precisa chegar à triagem com o farmacêutico até o limite
     for _, r in ag.iterrows():
         faltam = r["limite_min"] - t

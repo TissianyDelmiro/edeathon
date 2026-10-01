@@ -68,7 +68,7 @@ def test_series_por_hora(caso):
 
 
 def test_tabela_comparativa():
-    base = dict(remarcados=2, pacientes_atendidos=88, horas_qt=100, horas_sem_tratamento=50,
+    base = dict(remarcados=2, interior_perdeu_transporte=2, pacientes_atendidos=88, horas_qt=100, horas_sem_tratamento=50,
                 t2_mediana=10, t2_p90=60, pct_espera_30=20, pico_simultaneos=40,
                 capela_manha=90, capela_tarde=30)
     melhor = dict(base, remarcados=0, pacientes_atendidos=90, horas_qt=110,

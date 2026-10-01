@@ -165,7 +165,9 @@ with aba_painel:
             "- **🚫 Paciente faltou**: a poltrona fica livre e a bolsa sai da fila.\n"
             "- **📦 Bolsa atrasou**: minutos de atraso (devolução, falta de insumo...).\n"
             "- **💧 Infusão terminou em outro horário**: hora real informada pela "
-            "enfermagem.\n\n"
+            "enfermagem.\n"
+            "- **🚐 Transporte mudou o horário de volta**: novo horário avisado pela "
+            "prefeitura (só para pacientes do interior).\n\n"
             "Cada paciente continua na poltrona planejada: se o anterior sair mais tarde, o "
             "próximo espera. É só um **registro**: o sistema não toma decisão clínica."))
         if not usa_proposta:
@@ -175,7 +177,8 @@ with aba_painel:
             with st.expander("Abrir o registro de imprevistos", expanded=bool(ocorrencias)):
                 na_agenda = plano.sort_values("chegada")
                 opcoes_pac = {
-                    r["paciente"]: (f"{r['paciente']} · {r['protocolo']} · chega "
+                    r["paciente"]: (f"{r['paciente']}{' 🚐' if r.get('interior', False) else ''}"
+                                    f" · {r['protocolo']} · chega "
                                     f"{hhmm(r['chegada'])} · poltrona "
                                     f"{'—' if pd.isna(r['poltrona']) else int(r['poltrona'])}")
                     for _, r in na_agenda.iterrows()}
@@ -194,6 +197,16 @@ with aba_painel:
                                f"protocolo: {hhmm(linha['limite_min'])}")
                 elif tipo == "bolsa":
                     valor = st.number_input("Quantos minutos a bolsa atrasou?", 1, 240, 20)
+                elif tipo == "transporte":
+                    if bool(linha.get("interior", False)):
+                        base = int(linha["retorno_min"]) - 60
+                        h = st.time_input("Novo horário de volta do transporte",
+                                          time(base // 60, base % 60), step=300)
+                        valor = h.hour * 60 + h.minute
+                        st.caption(f"Horário previsto: {hhmm(linha['retorno_min'])} · a poltrona "
+                                   f"libera às {hhmm(linha['sai'])}")
+                    else:
+                        st.caption("Este paciente não é do interior.")
                 elif tipo == "termino" and not pd.isna(linha["fim_infusao"]):
                     base = int(linha["fim_infusao"]) + 20
                     h = st.time_input("Hora real de término (informada pela enfermagem)",
@@ -267,7 +280,7 @@ with aba_painel:
     ui.resumo(cartoes)
 
     # Alertas: os novos surgem no canto da tela; todos ficam guardados na central
-    lista = P.alertas(ag, t)
+    lista = P.alertas(ag, t, prem.folga_transporte)
     novos = ui.notificar_novos(lista, contexto=f"{chave_dia}|{escolha}")
     ui.quadro_flutuante(lista, novos)
     with ui.bloco("alertas"):
@@ -277,6 +290,8 @@ with aba_painel:
             "no **quadro do canto inferior direito**, e aqui estão **todos os alertas do "
             "horário**, com o texto completo.\n\n"
             "- **⚠️ Espera acima de 30 min**: paciente sentado aguardando a bolsa há mais de meia hora.\n"
+            "- **🚐 Transporte do interior**: o transporte volta em menos de 2 horas e a "
+            "poltrona do paciente não libera a tempo (ou ele já perdeu o transporte).\n"
             "- **⚠️ Perto do horário limite**: faltam menos de 30 min para o horário limite do "
             "protocolo e o paciente ainda não chegou à triagem com o farmacêutico.\n"
             "- **❌ Remarcado**: o paciente perdeu o horário limite. Não dá mais para manipular "
@@ -526,6 +541,34 @@ with aba_melhorou:
                  "sentados esperando a bolsa", "#b27600"),
             ])
 
+        # 1b) Pacientes do interior
+        if "perdeu_transporte_hoje" in jor.columns and jor["interior"].any():
+            with ui.bloco("interior"):
+                ui.titulo_bloco("🚐 Pacientes do interior", (
+                    "Pacientes que vêm no **transporte da prefeitura**: chegam cedo e precisam "
+                    "voltar num horário fixo. O tempo deles na unidade conta **desde a chegada "
+                    "do transporte**, nos dois cenários.\n\n"
+                    "O Sinfonia dá prioridade a eles sem prejudicar os pacientes da capital: o "
+                    "último cartão mostra o tempo médio da capital, para comparar."))
+                ji = jor[jor["interior"]].dropna(subset=["tempo_hoje", "tempo_proposta"])
+                jc = jor[~jor["interior"]].dropna(subset=["tempo_hoje", "tempo_proposta"])
+                rem_int_h = int((jor["interior"] & jor["remarcado_hoje"]).sum())
+                rem_int_p = int((jor["interior"] & jor["remarcado_proposta"]).sum())
+                ui.cartoes_impacto([
+                    ("🚐", f"{int(jor['perdeu_transporte_hoje'].sum())} → "
+                           f"{int(jor['perdeu_transporte_proposta'].sum())}",
+                     "perdem o transporte de volta",
+                     f"de {int(jor['interior'].sum())} pacientes do interior no dia", "#c62828"),
+                    ("📅", f"{rem_int_h} → {rem_int_p}", "remarcados (perdem a viagem)",
+                     "pacientes do interior", "#b27600"),
+                    ("⏱️", dur(ji["tempo_hoje"].mean()) + " → " + dur(ji["tempo_proposta"].mean()),
+                     "tempo médio na unidade (interior)", "desde a chegada do transporte",
+                     ui.TEAL),
+                    ("🏙️", dur(jc["tempo_hoje"].mean()) + " → " + dur(jc["tempo_proposta"].mean()),
+                     "tempo médio na unidade (capital)", "para conferir que ninguém é prejudicado",
+                     ui.MARINHO),
+                ])
+
         # 2) Histórias de pacientes
         with ui.bloco("historias"):
             ui.titulo_bloco("👤 Histórias de pacientes (fictícios)", (
@@ -536,26 +579,52 @@ with aba_melhorou:
             hist = []
             for _, r in jor[jor["remarcado_hoje"] & ~jor["remarcado_proposta"]].iterrows():
                 hist.append({
-                    "paciente": r["paciente"], "grupo": r["perfil"],
+                    "paciente": r["paciente"] + (" 🚐" if r["interior"] else ""),
+                    "id": r["paciente"], "grupo": r["perfil"],
                     "hoje": "Remarcado", "proposta": dur(r["tempo_proposta"]),
                     "selo": "✅ Atendido no mesmo dia",
                     "frase": f"{r['protocolo']}: hoje perderia o horário limite e voltaria "
                              f"outro dia. Com o Sinfonia chega às {hhmm(r['chegada_proposta'])} "
                              f"e começa a infusão às {hhmm(r['inicio_infusao_proposta'])}."})
-            for _, r in G.maiores_ganhos(jor, 6 - min(len(hist), 2)).iterrows():
+            if "perdeu_transporte_hoje" in jor.columns:
+                salvos = jor[jor["perdeu_transporte_hoje"] & ~jor["perdeu_transporte_proposta"]
+                             & ~jor["remarcado_proposta"]]
+                for _, r in salvos.iterrows():
+                    hist.append({
+                        "paciente": r["paciente"] + " 🚐", "id": r["paciente"],
+                        "grupo": r["perfil"],
+                        "hoje": dur(r["tempo_hoje"]), "proposta": dur(r["tempo_proposta"]),
+                        "selo": "🚐 Volta no transporte",
+                        "frase": f"Do interior: hoje sairia às {hhmm(r['sai_hoje'])} e perderia o "
+                                 f"transporte das {hhmm(r['retorno_min'])}. Com o Sinfonia sai "
+                                 f"às {hhmm(r['sai_proposta'])}."})
+            hist = hist[:4]  # deixa espaço para pelo menos 2 histórias de ganho de tempo
+            ja_contados = {h["id"] for h in hist}  # cada paciente aparece uma vez só
+            outros = jor[~jor["paciente"].isin(ja_contados)]
+            for _, r in G.maiores_ganhos(outros, 6 - len(hist)).iterrows():
                 hist.append({
-                    "paciente": r["paciente"], "grupo": r["perfil"],
+                    "paciente": r["paciente"] + (" 🚐" if r["interior"] else ""),
+                    "id": r["paciente"], "grupo": r["perfil"],
                     "hoje": dur(r["tempo_hoje"]), "proposta": dur(r["tempo_proposta"]),
                     "selo": f"⏱️ {dur(r['ganho'])} a menos",
-                    "frase": f"Esperava {dur(r['espera_hoje'])} sentado pela bolsa; com o "
-                             f"Sinfonia espera {dur(r['espera_proposta'])} "
-                             "(só a acomodação planejada)."})
+                    "frase": (
+                        f"Do interior: chega no transporte às {hhmm(r['chegada_proposta'])}. "
+                        f"Hoje só sairia às {hhmm(r['sai_hoje'])}; com o Sinfonia sai às "
+                        f"{hhmm(r['sai_proposta'])}." if r["interior"] else
+                        f"Esperava {dur(r['espera_hoje'])} sentado pela bolsa; com o Sinfonia "
+                        f"espera {dur(r['espera_proposta'])}"
+                        + (" (só a acomodação planejada)."
+                           if r["espera_proposta"] <= prem.acomodacao + 0.5 else "."))})
             ui.cartoes_historia(hist[:6])
             piores = jor[jor["ganho"] < 0]
             if len(piores):
+                motivos = [f"a proposta reserva {prem.acomodacao} min de acomodação antes da "
+                           "bolsa (hoje alguns não esperam nada)"]
+                if piores["interior"].any():
+                    motivos.append("pacientes do interior que hoje são atendidos cedo podem "
+                                   "esperar um pouco mais para que todos peguem o transporte")
                 st.caption(f"ℹ️ {len(piores)} paciente(s) ficam até "
-                           f"{dur(-piores['ganho'].min())} a mais: hoje não esperam nada, e a "
-                           f"proposta reserva {prem.acomodacao} min de acomodação antes da bolsa.")
+                           f"{dur(-piores['ganho'].min())} a mais: " + "; ".join(motivos) + ".")
 
         # 3) Antes e depois por paciente (gráfico de halteres)
         with ui.bloco("halteres"):
@@ -947,6 +1016,10 @@ with aba_premissas:
         c1, c2, c3 = st.columns(3)
         folga_t = c1.number_input(f"Folga antes do retorno, em min ({SUP})", 0, 120,
                                   prem.folga_transporte)
+        espera_int = c1.number_input(
+            f"Espera máxima do interior até sentar, em min ({SUP})", 15, 300,
+            prem.espera_max_interior,
+            help="Da chegada do transporte até sentar na poltrona (com o Sinfonia).")
         volta_de = c2.time_input("Transporte volta a partir de",
                                  time(prem.transporte_volta_de // 60,
                                       prem.transporte_volta_de % 60), step=900)
@@ -1037,7 +1110,7 @@ with aba_premissas:
                 transporte_chega_ate=chega_ate.hour * 60 + chega_ate.minute,
                 transporte_volta_de=volta_de.hour * 60 + volta_de.minute,
                 transporte_volta_ate=volta_ate.hour * 60 + volta_ate.minute,
-                folga_transporte=int(folga_t),
+                folga_transporte=int(folga_t), espera_max_interior=int(espera_int),
                 atraso_liberacao_dispersao=float(disp), semente=int(sem))
             st.success("✅ Premissas salvas. Calculando o novo dia…")
             st.rerun()

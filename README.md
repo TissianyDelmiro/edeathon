@@ -26,7 +26,7 @@ Para rodar os testes: `python -m pytest tests`
 
 | Aba | Para quê |
 |---|---|
-| 🏥 **Painel do dia** (tela inicial) | Para tablet ou TV do setor. Arraste a "hora atual" e veja o mapa das poltronas, os alertas (inclusive perto do horário limite e remarcados), **registre imprevistos** (atraso, falta, bolsa atrasada, término real da infusão) com o recálculo "planejado × realizado", a fila da farmácia e a situação das bolsas. |
+| 🏥 **Painel do dia** (tela inicial) | Para tablet ou TV do setor. Arraste a "hora atual" e veja as poltronas em **Grade, Lista ou Kanban**, os alertas (notificações no canto + quadro fixo + central), **registre imprevistos** (atraso, falta, bolsa atrasada, término real da infusão, mudança no horário do transporte) com o recálculo "planejado × realizado", a fila da farmácia e a situação das bolsas. |
 | 📊 **Hoje x Proposta** | Remarcações em destaque, indicadores lado a lado com a variação em %, gráficos por hora e a comparação da simulação com os números reais. |
 | 💚 **O que melhorou** | Dashboard do ganho para o paciente: horas a menos na unidade, histórias de pacientes fictícios ("PAC-069: 5h42 → 1h06"), antes e depois paciente a paciente, ganho por tipo de tratamento, para onde vai o tempo, **meta de espera** e **ociosidade** (poltronas livres, poltronas ocupadas sem tratar e capela parada). |
 | 📅 **Agenda do dia** | Gantt das poltronas e da capela, tabela de horários e exportação em CSV. |
@@ -42,6 +42,7 @@ Para rodar os testes: `python -m pytest tests`
 | `otimizador.py` | Modelo CP-SAT (OR-Tools) da agenda otimizada |
 | `indicadores.py` | Cálculo dos indicadores e das séries por hora |
 | `ganhos.py` | Ganho por paciente (tempo na unidade hoje × proposta), meta de espera |
+| `painel.py` (Kanban) | Colunas, prioridade e selos de risco do Kanban do fluxo |
 | `ocorrencias.py` | Imprevistos registrados e recálculo do dia realizado (efeito em cascata) |
 | `img/` | Logo e símbolo do Sinfonia |
 | `painel.py` | Estado da unidade em uma hora qualquer (poltronas, bolsas, fila, alertas) |
@@ -61,6 +62,9 @@ Para rodar os testes: `python -m pytest tests`
 | Folga antes do horário limite (proposta) | 30 min |
 | Sexta-feira | desmarcada (quando marcada, todos os limites ficam 1h mais cedo) |
 | Meta de espera na poltrona | 30 min |
+| Pacientes do interior | 40% do dia; transporte chega entre 6h30 e 7h30 e volta entre 15h00 e 16h30 |
+| Folga antes do retorno do transporte (proposta) | 30 min |
+| Espera máxima do interior até sentar (proposta) | 120 min (da chegada do transporte) |
 
 ### Tipos de tratamento (cores da folha do setor)
 
@@ -148,9 +152,46 @@ infusão.
 - **Reprodutibilidade:** o solver usa várias linhas de execução em paralelo, então
   duas execuções podem gerar agendas um pouco diferentes, com a mesma qualidade.
 
+### Pacientes do interior 🚐
+- Vêm no **transporte da prefeitura**: chegam cedo e voltam num horário fixo. Perder o
+  transporte ou ser remarcado custa a viagem inteira.
+- **Hoje (simulação):** chegam cedo, mas são atendidos na vez deles; quem só libera a
+  poltrona depois do retorno **perde o transporte** (no dia padrão: 2 pacientes).
+- **Proposta:** a chegada é a do transporte (não se marca outro horário) e a poltrona tem
+  que liberar **pelo menos 30 min antes do retorno** (regra obrigatória). O tempo deles na
+  unidade entra no objetivo com peso menor que o de remarcar, para a prioridade não tirar
+  a vaga de ninguém.
+- **Espera máxima até sentar:** da chegada do transporte até a poltrona, no máximo 120 min
+  (editável). Sem essa regra, o otimizador deixava alguns pacientes até 4 h na recepção
+  para equilibrar a capela.
+- **Troca:** com a capela de 3 postos não dá para preparar todas as bolsas do interior às
+  7h. Quanto menor a espera máxima, mais lotada fica a capela de manhã (90 min: capela
+  quase lotada; 120 min: pico ~165 min/h; 150 min: pico ~135 min/h). A média do interior
+  fica em ~3h (hoje ~5h) e alguns que hoje seriam atendidos logo cedo esperam até ~1h a
+  mais.
+- O tempo do interior conta **desde a chegada do transporte** nos dois cenários.
+
+### Kanban do fluxo
+- Cada cartão é um paciente; as colunas são as etapas: Agendado → Chegou → Na poltrona
+  (aguardando a bolsa) → Em infusão → Em alta → Concluído. Remarcados e faltas ficam à parte.
+- No topo, os **limites**: poltronas ocupadas (de 40) e capela preparando (de 3); ficam
+  vermelhos quando enchem.
+- Dentro da coluna vêm primeiro os cartões **⛔ em risco** (vai perder o transporte ou o
+  horário limite, espera longa), depois **⚠️ atenção**; sem selo = no prazo.
+
+### Alertas
+- Quando um alerta **começa**, aparece uma notificação no canto superior direito (o de
+  remarcado e o de transporte ficam até serem fechados); se ele acabar e voltar, aparece
+  de novo.
+- Os alertas ativos ficam no **quadro fixo do canto inferior direito** e todos, com o texto
+  completo, na **Central de alertas**.
+- Tipos: espera acima de 30 min, 🚐 transporte do interior em risco/perdido, perto do
+  horário limite, remarcado e preparar a alta.
+
 ### Imprevistos (Painel do dia)
 - A equipe registra **o que aconteceu**: atraso do paciente (hora real de chegada), falta,
-  atraso da bolsa (minutos) ou hora real de término da infusão informada pela enfermagem.
+  atraso da bolsa (minutos), hora real de término da infusão informada pela enfermagem ou
+  novo horário de volta do transporte do interior.
 - O dia é **recalculado sem replanejar**: cada paciente continua na poltrona planejada; se o
   anterior sair mais tarde, o próximo espera (efeito em cascata). Quem chegar depois do
   horário limite do protocolo vira remarcado.
@@ -162,6 +203,7 @@ infusão.
 | Indicador | Hoje | Proposta |
 |---|---|---|
 | Remarcados por perder o horário limite | 2 | 0 |
+| Pacientes do interior que perdem o transporte | 2 | 0 |
 | Pacientes atendidos no dia | 88 | 90 |
 | Horas de quimioterapia no turno | 132,8 h | 140,8 h |
 | Horas de poltrona sem tratamento | 54,8 h | 22,5 h |
