@@ -120,23 +120,33 @@ def alertas(ag: pd.DataFrame, t: float) -> list[dict]:
     for _, r in ag.iterrows():
         faltam = r["limite_min"] - t
         if r["chegada"] > t and 0 < faltam < AVISO_LIMITE:
-            lista.append({"tipo": "limite", "poltrona": 0,
+            lista.append({"tipo": "limite", "poltrona": 0, "id": f"limite:{r['paciente']}",
+                          "curto": f"{r['paciente']}: limite às {hhmm(r['limite_min'])} e ainda "
+                                   "não chegou",
                           "texto": f"Perto do horário limite: {r['paciente']} ({r['protocolo']}) "
                                    f"ainda não chegou à triagem. Limite às "
                                    f"{hhmm(r['limite_min'])} (faltam {int(round(faltam))} min)"})
         elif r["remarcado"] and t >= r["limite_min"]:
             lista.append({"tipo": "remarcado", "poltrona": 0,
+                          "id": f"remarcado:{r['paciente']}",
+                          "curto": f"{r['paciente']} perdeu o horário limite: remarcado",
                           "texto": f"{r['paciente']} ({r['protocolo']}) perdeu o horário limite "
                                    f"das {hhmm(r['limite_min'])}: remarcado para outro dia"})
     atend = ag.dropna(subset=["senta"])
     for _, r in atend.iterrows():
         if r["senta"] <= t < r["inicio_infusao"] and t - r["senta"] > LIMITE_ESPERA:
             lista.append({"tipo": "espera", "poltrona": int(r["poltrona"]),
+                          "id": f"espera:{r['paciente']}",
+                          "curto": f"{r['paciente']} (poltrona {int(r['poltrona'])}): esperando "
+                                   f"a bolsa há {int(t - r['senta'])} min",
                           "texto": f"{r['paciente']} (poltrona {int(r['poltrona'])}) está "
                                    f"aguardando a bolsa há {int(t - r['senta'])} min"})
         faltam = r["fim_infusao"] - t
         if r["inicio_infusao"] <= t and 0 < faltam <= AVISO_ALTA:
             lista.append({"tipo": "alta", "poltrona": int(r["poltrona"]),
+                          "id": f"alta:{r['paciente']}",
+                          "curto": f"{r['paciente']} (poltrona {int(r['poltrona'])}): preparar "
+                                   f"a alta, faltam {int(round(faltam))} min",
                           "texto": f"{'Falta' if round(faltam) == 1 else 'Faltam'} {int(round(faltam))} "
                                    f"min para acabar a infusão de "
                                    f"{r['paciente']} (poltrona {int(r['poltrona'])}): "

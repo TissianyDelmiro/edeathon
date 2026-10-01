@@ -266,10 +266,14 @@ with aba_painel:
                                         remarcados_ate_agora, *ui.ESPERA_LONGA[2:]))
     ui.resumo(cartoes)
 
-    # Alertas
+    # Alertas: os novos surgem no canto da tela; todos ficam guardados na central
+    lista = P.alertas(ag, t)
+    ui.notificar_novos(lista, contexto=f"{chave_dia}|{escolha}")
     with ui.bloco("alertas"):
-        ui.titulo_bloco("🔔 Alertas agora", (
-            "Avisos para a equipe no horário escolhido:\n\n"
+        ui.titulo_bloco(f"🔔 Central de alertas ({len(lista)} agora)", (
+            "Os alertas **novos** aparecem no **canto da tela** e somem sozinhos (os mais "
+            "graves ficam mais tempo; o de remarcado fica até ser fechado). Aqui ficam "
+            "**todos os alertas do horário**, para ninguém perder nada.\n\n"
             "- **⚠️ Espera acima de 30 min**: paciente sentado aguardando a bolsa há mais de meia hora.\n"
             "- **⚠️ Perto do horário limite**: faltam menos de 30 min para o horário limite do "
             "protocolo e o paciente ainda não chegou à triagem com o farmacêutico.\n"
@@ -277,14 +281,11 @@ with aba_painel:
             "a bolsa no dia e ele é remarcado para outro dia.\n"
             "- **🔔 Preparar alta**: faltam 15 minutos ou menos para acabar a infusão. "
             "Adiantar a alta libera a poltrona mais rápido."))
-        lista = P.alertas(ag, t)
         if not lista:
             ui.caixa_alerta("ok", "Nenhum alerta neste horário.")
-        for a in lista[:8]:
-            ui.caixa_alerta(a["tipo"], a["texto"])
-        if len(lista) > 8:
-            with st.expander(f"Ver mais {len(lista) - 8} alertas"):
-                for a in lista[8:]:
+        else:
+            with st.expander(f"Ver os {len(lista)} alertas"):
+                for a in lista:
                     ui.caixa_alerta(a["tipo"], a["texto"])
 
     # Mapa de poltronas

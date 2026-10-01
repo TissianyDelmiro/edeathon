@@ -247,6 +247,11 @@ CSS = f"""
 .hist .ganho.neutro {{ background: #5f6f7e; }}
 .hist .frase {{ font-size: 18px; margin-top: 8px; }}
 
+/* ---------- Notificações no canto (st.toast) ---------- */
+[data-testid="stToast"] {{ min-width: 380px; border-left: 8px solid {TEAL};
+                           box-shadow: 0 8px 24px rgba(25, 55, 93, .25); }}
+[data-testid="stToast"] p {{ font-size: 19px !important; font-weight: 600; color: {TEXTO}; }}
+
 /* ---------- Tabelas ---------- */
 .tabela-grande {{ width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid {BORDA};
                  border-radius: 12px; overflow: hidden; }}
@@ -402,6 +407,37 @@ def lista_poltronas(estado: pd.DataFrame, hhmm):
                        "Tipo de tratamento": grupo, "Detalhe": detalhe, "Libera às": libera})
     linhas.sort(key=lambda linha: linha["_ordem"])
     tabela(pd.DataFrame(linhas).drop(columns="_ordem"))
+
+
+# Notificação no canto: (ícone, tempo na tela). Quanto mais grave, mais tempo fica.
+NOTIFICACAO = {
+    "remarcado": ("❌", "infinite"),  # fica até alguém fechar
+    "espera": ("⚠️", "long"),
+    "limite": ("⚠️", "long"),
+    "alta": ("🔔", "short"),
+}
+MAX_NOTIFICACOES = 3  # por vez, para não poluir a tela
+
+
+def notificar_novos(alertas: list[dict], contexto: str) -> int:
+    """Mostra no canto da tela só os alertas NOVOS (cada um uma única vez).
+
+    `contexto` separa as listas de "já mostrados" (ex.: agenda escolhida e dia gerado).
+    Devolve quantos alertas novos apareceram.
+    """
+    vistos = st.session_state.setdefault("alertas_vistos", {}).setdefault(contexto, set())
+    novos = [a for a in alertas if a["id"] not in vistos]
+    for a in novos[:MAX_NOTIFICACOES]:
+        icone, duracao = NOTIFICACAO[a["tipo"]]
+        # Texto curto: a notificação corta mensagens longas (o completo fica na central)
+        st.toast(a["curto"], icon=icone, duration=duracao)
+    if len(novos) > MAX_NOTIFICACOES:
+        resto = len(novos) - MAX_NOTIFICACOES
+        # (não começa com "+", que o markdown transformaria em item de lista)
+        st.toast(f"Mais {resto} alerta{'s' if resto > 1 else ''} na Central de alertas",
+                 icon="🔔", duration="long")
+    vistos.update(a["id"] for a in novos)
+    return len(novos)
 
 
 def caixa_alerta(tipo: str, texto: str):
