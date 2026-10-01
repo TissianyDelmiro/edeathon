@@ -126,3 +126,15 @@ def test_mapa_das_poltronas_em_lista():
     assert not at.exception, at.exception
     textos = " ".join(m.value for m in at.markdown)
     assert "Libera às" in textos and "tabela-grande" in textos
+
+
+def test_kanban_no_painel():
+    at = _rodar()
+    modo = next(r for r in at.radio if r.label == "Ver como")
+    modo.set_value("🗂️ Kanban").run()
+    assert not at.exception, at.exception
+    html_kb = " ".join(m.value for m in at.markdown if 'class="kanban"' in m.value)
+    assert html_kb, "o quadro Kanban deve aparecer"
+    for coluna in ("📅 Agendado", "🚪 Chegou", "💧 Em infusão", "✅ Concluído"):
+        assert coluna in html_kb
+    assert "Poltronas ocupadas" in html_kb and "Capela preparando" in html_kb

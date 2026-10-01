@@ -304,11 +304,21 @@ with aba_painel:
             "🟢 Rápido e 🔵 Injetável. O nome aparece sempre escrito junto.\n\n"
             "**Libera às** é a previsão de quando a poltrona fica livre.\n\n"
             "**Ver como**: *Grade* mostra um cartão por poltrona (bom para TV); *Lista* "
-            "mostra uma linha por poltrona, ordenada pela próxima a liberar."))
-        modo = st.radio("Ver como", ["🔲 Grade", "📋 Lista"], horizontal=True,
+            "mostra uma linha por poltrona, ordenada pela próxima a liberar; *Kanban* mostra "
+            "cada paciente como um cartão andando pelas etapas do dia (agendado → chegou → "
+            "na poltrona → em infusão → alta → concluído), com os limites de poltronas e da "
+            "capela no topo."))
+        modo = st.radio("Ver como", ["🔲 Grade", "📋 Lista", "🗂️ Kanban"], horizontal=True,
                         key="modo_poltronas")
         if modo == "📋 Lista":
             ui.lista_poltronas(estado, hhmm)
+        elif modo == "🗂️ Kanban":
+            st.caption("Cada cartão é um paciente; cada coluna, uma etapa. Os mais urgentes "
+                       "vêm primeiro: ⛔ **em risco**, ⚠️ **atenção**; cartão sem selo e com "
+                       "borda verde está **no prazo**. 🚐 = paciente do interior, com a hora em "
+                       "que o transporte volta.")
+            ui.kanban(P.kanban(ag, t, prem.folga_transporte), P.ocupacao_kanban(ag, t),
+                      prem.n_poltronas, prem.capacidade_capela)
         else:
             ui.grade_poltronas(estado, hhmm)
 

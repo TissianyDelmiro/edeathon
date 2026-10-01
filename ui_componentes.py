@@ -278,6 +278,36 @@ CSS = f"""
 @keyframes fl-pulsar {{ 50% {{ transform: scale(1.15); }} }}
 @media (prefers-reduced-motion: reduce) {{ .fl-item.novo, .fl-badge {{ animation: none; }} }}
 
+/* ---------- Kanban do fluxo ---------- */
+.kb-topo {{ display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0 12px; }}
+.kb-medidor {{ background: {TEAL_CLARO}; border: 1px solid #9fd0c9; border-radius: 999px;
+               padding: 6px 16px; font-size: 18px; font-weight: 800; color: {MARINHO}; }}
+.kb-medidor.cheio {{ background: #fdeaea; border-color: #c62828; color: #7f1d1d; }}
+.kanban {{ display: grid; grid-template-columns: repeat(6, minmax(165px, 1fr));
+           gap: 12px; overflow-x: auto; padding-bottom: 8px; }}
+.kb-col {{ background: #eef3f6; border: 1px solid {BORDA}; border-radius: 14px; padding: 8px;
+           min-width: 0;
+           min-height: 160px; }}
+.kb-cab {{ font-size: 19px; font-weight: 800; color: {MARINHO}; display: flex;
+           justify-content: space-between; align-items: center; gap: 6px; }}
+.kb-qtd {{ background: {MARINHO}; color: #fff; border-radius: 999px; padding: 1px 10px;
+           font-size: 16px; }}
+.kb-sub {{ font-size: 15px; color: {TEXTO_2}; margin-bottom: 8px; min-height: 20px; }}
+.kb-card {{ background: #fff; border: 1px solid {BORDA}; border-left: 6px solid var(--cor);
+            border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; color: {TEXTO};
+            box-shadow: 0 1px 3px rgba(25, 55, 93, .08); line-height: 1.35; }}
+.kb-card .kb-id {{ display: flex; justify-content: space-between; gap: 6px; font-size: 18px;
+                   font-weight: 800; color: {MARINHO}; }}
+.kb-card .kb-det {{ font-size: 16px; color: {TEXTO}; margin-top: 2px; }}
+.kb-card .kb-risco {{ font-size: 15px; font-weight: 700; margin-top: 4px; }}
+.kb-int {{ display: inline-block; background: #efe7d8; border: 1px solid #b08850;
+           color: #5a3d12; border-radius: 999px; padding: 0 8px; margin: 2px 0;
+           font-size: 14px; font-weight: 800; max-width: 100%; }}
+.kb-card .grupo {{ max-width: 100%; box-sizing: border-box; font-size: 16px; }}
+.kb-mais {{ font-size: 15px; color: {TEXTO_2}; text-align: center; padding: 4px; }}
+.kb-fora {{ margin-top: 10px; font-size: 17px; color: {TEXTO}; }}
+.kb-fora b {{ color: #7f1d1d; }}
+
 /* ---------- Tabelas ---------- */
 .tabela-grande {{ width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid {BORDA};
                  border-radius: 12px; overflow: hidden; }}
@@ -497,6 +527,62 @@ def quadro_flutuante(alertas: list[dict], novos: set[str], maximo: int = 4):
     st.markdown(f'<details class="flutuante"{aberto} role="region" aria-label="Alertas">'
                 f'<summary>{resumo_txt}</summary><div class="fl-corpo">{corpo}</div></details>',
                 unsafe_allow_html=True)
+
+
+# Selo de risco do Kanban: (ícone, texto, cor da borda). Sempre ícone + texto.
+RISCO_KANBAN = {
+    P.EM_RISCO: ("⛔", "Em risco", "#c62828"),
+    P.ATENCAO: ("⚠️", "Atenção", "#b27600"),
+    P.NO_PRAZO: ("", "", "#0a8a0a"),  # sem selo = no prazo (borda verde)
+    "": ("", "", "#9aa8b3"),
+}
+# Quantos cartões mostrar por coluna (o resto vira "+ N")
+MAX_CARTOES = {"concluido": 4}
+MAX_CARTOES_PADRAO = 6
+
+
+def kanban(colunas: dict[str, list[dict]], ocupacao: dict[str, int], n_poltronas: int,
+           capacidade_capela: int):
+    """Quadro Kanban: medidores dos limites + uma coluna por etapa do fluxo."""
+    def medidor(icone, nome, usado, total):
+        cheio = usado >= total
+        aviso = " · ⚠️ no limite" if cheio else ""
+        return (f'<span class="kb-medidor{" cheio" if cheio else ""}">{icone} {nome}: '
+                f'{usado}/{total}{aviso}</span>')
+
+    topo = (medidor("🪑", "Poltronas ocupadas", ocupacao["poltronas"], n_poltronas)
+            + medidor("🧪", "Capela preparando", ocupacao["capela"], capacidade_capela))
+    cols_html = []
+    for chave, titulo, sub in P.COLUNAS_KANBAN:
+        cartoes = colunas[chave]
+        limite = MAX_CARTOES.get(chave, MAX_CARTOES_PADRAO)
+        itens = []
+        for c in cartoes[:limite]:
+            icone, texto, cor = RISCO_KANBAN[c["risco"]]
+            interior = (f'<div><span class="kb-int" title="Paciente do interior">'
+                        f'🚐 volta {c["retorno"]}</span></div>' if c["interior"] else "")
+            poltrona = f' · poltrona {c["poltrona"]}' if c["poltrona"] and chave in (
+                "aguardando", "infusao", "alta") else ""
+            risco = ""
+            if texto:
+                motivo = f': {html.escape(c["motivo"])}' if c["motivo"] else ""
+                risco = f'<div class="kb-risco">{icone} {texto}{motivo}</div>'
+            itens.append(
+                f'<div class="kb-card" style="--cor:{cor}">'
+                f'<div class="kb-id">{c["paciente"]}</div>{interior}'
+                f'{selo_grupo(c["perfil"])}'
+                f'<div class="kb-det">{html.escape(c["detalhe"])}{poltrona}</div>{risco}</div>')
+        if len(cartoes) > limite:
+            itens.append(f'<div class="kb-mais">+ {len(cartoes) - limite} pacientes</div>')
+        cols_html.append(
+            f'<div class="kb-col" aria-label="{html.escape(titulo)}">'
+            f'<div class="kb-cab"><span>{titulo}</span><span class="kb-qtd">{len(cartoes)}</span>'
+            f'</div><div class="kb-sub">{html.escape(sub)}</div>{"".join(itens)}</div>')
+    fora = [f"<b>{titulo}:</b> " + ", ".join(c["paciente"] for c in colunas[chave])
+            for chave, titulo in P.FORA_DO_DIA if colunas[chave]]
+    fora_html = f'<div class="kb-fora">{" &nbsp;·&nbsp; ".join(fora)}</div>' if fora else ""
+    st.markdown(f'<div class="kb-topo">{topo}</div><div class="kanban">{"".join(cols_html)}'
+                f'</div>{fora_html}', unsafe_allow_html=True)
 
 
 def caixa_alerta(tipo: str, texto: str):

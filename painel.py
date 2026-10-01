@@ -157,3 +157,111 @@ def alertas(ag: pd.DataFrame, t: float) -> list[dict]:
 def na_recepcao(ag: pd.DataFrame, t: float) -> pd.DataFrame:
     """Pacientes que já chegaram mas ainda aguardam poltrona (acontece no cenário de hoje)."""
     return ag[(ag["chegada"] <= t) & (ag["senta"] > t)]
+
+
+# ---------------------------------------------------------------------------
+# Kanban do fluxo: cada paciente é um cartão; cada coluna, uma etapa
+# ---------------------------------------------------------------------------
+COLUNAS_KANBAN = [
+    ("agendado", "📅 Agendado", "ainda não chegou"),
+    ("chegou", "🚪 Chegou", "triagem / recepção"),
+    ("aguardando", "⏳ Na poltrona", "aguardando a bolsa"),
+    ("infusao", "💧 Em infusão", ""),
+    ("alta", "🏁 Em alta", "liberando a poltrona"),
+    ("concluido", "✅ Concluído", ""),
+]
+FORA_DO_DIA = [("remarcado", "❌ Remarcado"), ("faltou", "🚫 Faltou")]
+# Selos de risco (a interface mostra ícone + texto, nunca só cor)
+NO_PRAZO, ATENCAO, EM_RISCO = "no_prazo", "atencao", "em_risco"
+
+
+def _coluna(r: pd.Series, t: float) -> str:
+    if r.get("faltou", False):
+        return "faltou"
+    if r["remarcado"]:
+        # Só vira "remarcado" quando o horário limite passa; antes disso está a caminho
+        return "remarcado" if t >= r["limite_min"] else "agendado"
+    if t < r["chegada"]:
+        return "agendado"
+    if t < r["senta"]:
+        return "chegou"
+    if t < r["inicio_infusao"]:
+        return "aguardando"
+    if t < r["fim_infusao"]:
+        return "infusao"
+    if t < r["sai"]:
+        return "alta"
+    return "concluido"
+
+
+def _risco(r: pd.Series, coluna: str, t: float, folga_transporte: int) -> tuple[str, str]:
+    """Selo de risco do cartão e o motivo, em linguagem simples."""
+    if coluna in ("concluido", "remarcado", "faltou"):
+        return "", ""
+    interior = bool(r.get("interior", False)) and not pd.isna(r.get("retorno_min"))
+    if interior and r["sai"] > r["retorno_min"]:
+        return EM_RISCO, f"vai perder o transporte das {hhmm(r['retorno_min'])}"
+    if coluna == "agendado" and r["chegada"] > r["limite_min"]:
+        return EM_RISCO, f"vai perder o horário limite ({hhmm(r['limite_min'])})"
+    if coluna == "aguardando" and t - r["senta"] > LIMITE_ESPERA:
+        return EM_RISCO, f"esperando a bolsa há {int(t - r['senta'])} min"
+    if interior and r["sai"] > r["retorno_min"] - folga_transporte:
+        return ATENCAO, f"transporte sai às {hhmm(r['retorno_min'])}"
+    if coluna == "agendado" and 0 < r["limite_min"] - t < AVISO_LIMITE:
+        return ATENCAO, f"limite às {hhmm(r['limite_min'])}"
+    if coluna == "aguardando" and t - r["senta"] > LIMITE_ESPERA / 2:
+        return ATENCAO, f"esperando a bolsa há {int(t - r['senta'])} min"
+    return NO_PRAZO, ""
+
+
+def _detalhe(r: pd.Series, coluna: str, t: float) -> tuple[str, float]:
+    """Texto do cartão e a chave de ordem dentro da coluna (menor = mais urgente)."""
+    if coluna == "agendado":
+        return f"chega às {hhmm(r['chegada'])}", r["chegada"]
+    if coluna == "chegou":
+        return f"senta às {hhmm(r['senta'])}", r["senta"]
+    if coluna == "aguardando":
+        return f"esperando há {int(t - r['senta'])} min", -(t - r["senta"])
+    if coluna == "infusao":
+        return f"termina às {hhmm(r['fim_infusao'])}", r["fim_infusao"]
+    if coluna == "alta":
+        return f"libera às {hhmm(r['sai'])}", r["sai"]
+    if coluna == "concluido":
+        return f"saiu às {hhmm(r['sai'])}", -r["sai"]
+    return "", 0.0
+
+
+def kanban(ag: pd.DataFrame, t: float, folga_transporte: int = 30) -> dict[str, list[dict]]:
+    """Cartões de cada coluna do Kanban no instante t, já na ordem de prioridade.
+
+    Dentro da coluna vêm primeiro os cartões em risco, depois os de atenção, e então a
+    ordem natural da etapa (quem chega/termina antes, quem espera há mais tempo).
+    """
+    colunas: dict[str, list[dict]] = {c: [] for c, *_ in COLUNAS_KANBAN}
+    colunas.update({c: [] for c, _ in FORA_DO_DIA})
+    peso_risco = {EM_RISCO: 0, ATENCAO: 1, NO_PRAZO: 2, "": 2}
+    for _, r in ag.iterrows():
+        col = _coluna(r, t)
+        risco, motivo = _risco(r, col, t, folga_transporte)
+        detalhe, ordem = _detalhe(r, col, t)
+        interior = bool(r.get("interior", False)) and not pd.isna(r.get("retorno_min"))
+        colunas[col].append({
+            "paciente": r["paciente"], "perfil": r["perfil"], "protocolo": r["protocolo"],
+            "interior": interior,
+            "retorno": hhmm(r["retorno_min"]) if interior else "",
+            "poltrona": None if pd.isna(r.get("poltrona")) else int(r["poltrona"]),
+            "risco": risco, "motivo": motivo, "detalhe": detalhe,
+            "_ordem": (peso_risco[risco], ordem),
+        })
+    for cartoes in colunas.values():
+        cartoes.sort(key=lambda c: c["_ordem"])
+    return colunas
+
+
+def ocupacao_kanban(ag: pd.DataFrame, t: float) -> dict[str, int]:
+    """Quantos itens estão nos recursos limitados no instante t (limites do Kanban)."""
+    at = ag.dropna(subset=["senta"])
+    return {
+        "poltronas": int(((at["senta"] <= t) & (t < at["sai"])).sum()),
+        "capela": int(((at["inicio_preparo"] <= t) & (t < at["fim_preparo"])).sum()),
+    }
