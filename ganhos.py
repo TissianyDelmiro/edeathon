@@ -8,6 +8,9 @@ Tempo na unidade = da chegada até a poltrona ser liberada, dividido em:
 - infusão:         igual nos dois cenários (a duração é do hospital e nunca muda);
 - alta:            fim da infusão até liberar a poltrona.
 
+Pacientes do interior: o tempo conta desde a chegada do transporte da prefeitura (é
+quando eles chegam à unidade), nos dois cenários, para a comparação ser justa.
+
 Todos os pacientes são fictícios; os números são estimativas do modelo.
 Na proposta o paciente chega no horário marcado: parte do ganho é tempo que ele passa
 em casa em vez de esperar na unidade.
@@ -30,7 +33,10 @@ def jornada(atual: pd.DataFrame, otim: pd.DataFrame) -> pd.DataFrame:
         columns={"remarcado": "remarcado_hoje"})
     for nome, ag in (("hoje", atual), ("proposta", otim)):
         a = ag.set_index("paciente")
-        base[f"tempo_{nome}"] = base["paciente"].map(a["sai"] - a["chegada"])
+        inicio = a["chegada"]
+        if "chegada_transporte" in a.columns:
+            inicio = a["chegada_transporte"].where(a["interior"].astype(bool), a["chegada"])
+        base[f"tempo_{nome}"] = base["paciente"].map(a["sai"] - inicio)
         base[f"espera_{nome}"] = base["paciente"].map(a["inicio_infusao"] - a["senta"])
         base[f"chegada_{nome}"] = base["paciente"].map(a["chegada"])
         base[f"inicio_infusao_{nome}"] = base["paciente"].map(a["inicio_infusao"])

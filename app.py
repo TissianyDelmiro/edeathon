@@ -268,12 +268,14 @@ with aba_painel:
 
     # Alertas: os novos surgem no canto da tela; todos ficam guardados na central
     lista = P.alertas(ag, t)
-    ui.notificar_novos(lista, contexto=f"{chave_dia}|{escolha}")
+    novos = ui.notificar_novos(lista, contexto=f"{chave_dia}|{escolha}")
+    ui.quadro_flutuante(lista, novos)
     with ui.bloco("alertas"):
         ui.titulo_bloco(f"🔔 Central de alertas ({len(lista)} agora)", (
-            "Os alertas **novos** aparecem no **canto da tela** e somem sozinhos (os mais "
-            "graves ficam mais tempo; o de remarcado fica até ser fechado). Aqui ficam "
-            "**todos os alertas do horário**, para ninguém perder nada.\n\n"
+            "Quando um alerta **começa**, aparece uma notificação no **canto superior "
+            "direito** (o de remarcado fica até ser fechado). Os alertas ativos ficam sempre "
+            "no **quadro do canto inferior direito**, e aqui estão **todos os alertas do "
+            "horário**, com o texto completo.\n\n"
             "- **⚠️ Espera acima de 30 min**: paciente sentado aguardando a bolsa há mais de meia hora.\n"
             "- **⚠️ Perto do horário limite**: faltam menos de 30 min para o horário limite do "
             "protocolo e o paciente ainda não chegou à triagem com o farmacêutico.\n"

@@ -32,19 +32,40 @@ def _app_no_cenario_de_hoje(hora):
     return at
 
 
-def test_alerta_novo_vira_notificacao_uma_unica_vez():
+def test_alerta_que_continua_ativo_nao_se_repete():
     at = _app_no_cenario_de_hoje(time(12, 30))
-    lista_vistos = at.session_state["alertas_vistos"]
-    vistos = set().union(*lista_vistos.values())
-    assert vistos, "às 12h30 do cenário de hoje há alertas (ex.: remarcados)"
+    ativos = set().union(*at.session_state["alertas_ativos"].values())
+    assert ativos, "às 12h30 do cenário de hoje há alertas (ex.: remarcados)"
     primeira = [t.value for t in at.toast]
     assert primeira, "os alertas novos devem aparecer como notificação"
-    # No máximo 3 notificações de alerta + 1 aviso de "+ N alertas"
+    # No máximo 3 notificações de alerta + 1 aviso de "mais N alertas"
     assert len(primeira) <= MAX_NOTIFICACOES + 1
     # Nada mudou: rodar de novo não repete as notificações
     at.run()
     assert not at.exception
     assert [t.value for t in at.toast] == []
+
+
+def test_alerta_volta_a_aparecer_quando_a_hora_volta():
+    """O problema relatado: depois que a notificação sumia, ela não voltava nunca mais."""
+    at = _app_no_cenario_de_hoje(time(11, 45))
+    antes = {t.value for t in at.toast}
+    assert antes
+    at.slider[0].set_value(time(7, 0)).run()  # vai para um horário sem esses alertas
+    at.slider[0].set_value(time(11, 45)).run()  # e volta
+    assert not at.exception
+    depois = {t.value for t in at.toast}
+    assert depois & antes, "os mesmos alertas devem aparecer de novo"
+
+
+def test_quadro_flutuante_sempre_visivel():
+    at = _app_no_cenario_de_hoje(time(11, 45))
+    html_quadro = " ".join(m.value for m in at.markdown if 'class="flutuante"' in m.value)
+    assert html_quadro, "o quadro de alertas do canto deve estar na tela"
+    assert "alertas agora" in html_quadro and "fl-item" in html_quadro
+    at.run()  # sem alerta novo: o quadro continua, sem o selo "novo"
+    html_quadro = " ".join(m.value for m in at.markdown if 'class="flutuante"' in m.value)
+    assert "fl-item" in html_quadro and "fl-selo" not in html_quadro
 
 
 def test_central_de_alertas_guarda_todos():

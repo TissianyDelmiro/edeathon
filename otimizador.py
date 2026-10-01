@@ -17,13 +17,17 @@ Restrições:
 - o paciente só começa a infusão quando a bolsa chegou (preparo + transporte);
 - horário limite do protocolo (folha do setor): o paciente chega à triagem pelo menos
   `folga_limite` minutos antes do limite (zero remarcações por prazo);
+- pacientes do interior: chegam com o transporte da prefeitura (não dá para marcar outro
+  horário) e precisam liberar a poltrona até `folga_transporte` minutos antes do retorno;
 - tudo dentro do turno.
 
 Objetivo (soma ponderada, em ordem de importância):
 1. atender todos os pacientes do dia (maximizar as horas de quimioterapia no turno);
 2. suavizar a carga da capela (minimizar o maior volume de preparo em uma hora);
 3. minimizar a espera total na poltrona;
-4. minimizar o tempo em que a bolsa pronta fica parada antes da infusão.
+4. minimizar o tempo dos pacientes do interior na unidade (prioridade, sem tirar a vaga de
+   ninguém: o peso é bem menor que o de remarcar);
+5. minimizar o tempo em que a bolsa pronta fica parada antes da infusão.
 
 As durações de preparo e infusão são lidas das premissas e NUNCA alteradas.
 """
@@ -46,6 +50,7 @@ PESO_FORA_DO_TURNO = 1000  # por minuto de infusão de paciente que precisaria s
 PESO_PICO_CAPELA = 20  # por minuto de preparo na hora mais carregada da capela
 PESO_ESPERA = 10  # por minuto de espera do paciente na poltrona
 PESO_BOLSA_PARADA = 1  # por minuto de bolsa pronta aguardando
+PESO_INTERIOR = 1  # por minuto de paciente do interior na unidade (da chegada do transporte)
 
 STATUS_PT = {
     cp_model.OPTIMAL: "Solução ótima encontrada",
@@ -67,6 +72,7 @@ def otimizar(dia: pd.DataFrame, prem: Premissas, limite_s: float = 20.0) -> dict
     presente, inicio_inf, inicio_prep, espera = [], [], [], []
     iv_capela, dem_capela, iv_poltrona = [], [], []
     horas_prep = []  # por paciente: lista de booleanos "preparo começa na hora h"
+    tempo_interior = []  # minutos na unidade de cada paciente do interior
 
     for i, r in dia.reset_index(drop=True).iterrows():
         prep, inf = int(r["preparo_min"]), int(r["infusao_min"])
@@ -79,6 +85,11 @@ def otimizar(dia: pd.DataFrame, prem: Premissas, limite_s: float = 20.0) -> dict
         # (a infusão começa no máximo acomodação + 60 min de espera depois de sentar)
         chegada_max = int(r["limite_min"]) - prem.folga_limite
         k_max = min(k_max, (chegada_max + prem.acomodacao + 60 - ini) // SLOT)
+        # ...e, para quem é do interior, termina a tempo de pegar o transporte de volta
+        do_interior = bool(r.get("interior", False)) and not pd.isna(r.get("retorno_min"))
+        if do_interior:
+            sai_max = int(r["retorno_min"]) - prem.folga_transporte
+            k_max = min(k_max, (sai_max - inf - alta - ini) // SLOT)
         if k_max < k_min:
             m.add(x == 0)  # não cabe no dia de jeito nenhum
             k_max = k_min
@@ -103,6 +114,14 @@ def otimizar(dia: pd.DataFrame, prem: Premissas, limite_s: float = 20.0) -> dict
         m.add(dur_poltrona == prem.acomodacao + w + inf + alta)
         sai = m.new_int_var(ini - 120, fim + 400, f"sai_{i}")
         iv_poltrona.append(m.new_optional_interval_var(senta, dur_poltrona, sai, x, f"poltrona_{i}"))
+        if do_interior:
+            chega_t = int(r["chegada_transporte"])
+            m.add(senta >= chega_t).only_enforce_if(x)  # só senta depois que o transporte chega
+            m.add(sai <= sai_max).only_enforce_if(x)
+            t_int = m.new_int_var(0, fim + 400, f"tempo_interior_{i}")
+            m.add(t_int == sai - chega_t).only_enforce_if(x)
+            m.add(t_int == 0).only_enforce_if(x.Not())
+            tempo_interior.append(t_int)
 
         # Hora do turno em que o preparo começa (para medir a carga da capela por hora)
         hora = m.new_int_var(0, n_horas - 1, f"hora_prep_{i}")
@@ -146,7 +165,8 @@ def otimizar(dia: pd.DataFrame, prem: Premissas, limite_s: float = 20.0) -> dict
         m.add(p == 0).only_enforce_if(presente[i].Not())
         parada.append(p)
     m.minimize(PESO_FORA_DO_TURNO * sum(fora) + PESO_PICO_CAPELA * pico
-               + PESO_ESPERA * sum(espera) + PESO_BOLSA_PARADA * sum(parada))
+               + PESO_ESPERA * sum(espera) + PESO_BOLSA_PARADA * sum(parada)
+               + PESO_INTERIOR * sum(tempo_interior))
 
     # Resolver
     solver = cp_model.CpSolver()
@@ -184,6 +204,10 @@ def otimizar(dia: pd.DataFrame, prem: Premissas, limite_s: float = 20.0) -> dict
     ag["inicio_infusao"] = s_inf
     ag["senta"] = s_inf - prem.acomodacao - w
     ag["chegada"] = ag["senta"]  # horário de chegada recomendado = hora de sentar
+    if "interior" in ag.columns:
+        # Interior: chega com o transporte (horário fixo), e não no horário recomendado
+        intr = ag["interior"].astype(bool)
+        ag.loc[intr, "chegada"] = ag.loc[intr, "chegada_transporte"]
     ag["inicio_preparo"] = s_prep
     ag["liberacao"] = s_prep  # prescrição liberada com antecedência (agendamento prévio)
     ag["fim_preparo"] = s_prep + ag["preparo_min"]

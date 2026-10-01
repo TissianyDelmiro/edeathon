@@ -252,6 +252,32 @@ CSS = f"""
                            box-shadow: 0 8px 24px rgba(25, 55, 93, .25); }}
 [data-testid="stToast"] p {{ font-size: 19px !important; font-weight: 600; color: {TEXTO}; }}
 
+/* ---------- Quadro de alertas flutuante (canto inferior direito) ---------- */
+.flutuante {{ position: fixed; right: 22px; bottom: 22px; z-index: 1000; width: 400px;
+              max-width: calc(100vw - 44px); background: #fff; border: 1px solid {BORDA};
+              border-left: 8px solid {TEAL}; border-radius: 16px;
+              box-shadow: 0 10px 30px rgba(25, 55, 93, .28); }}
+.flutuante summary {{ cursor: pointer; list-style: none; padding: 12px 16px; font-size: 20px;
+                      font-weight: 800; color: {MARINHO}; }}
+.flutuante summary::-webkit-details-marker {{ display: none; }}
+.flutuante summary::after {{ content: "▲"; float: right; font-size: 16px; color: {TEXTO_2}; }}
+.flutuante[open] summary::after {{ content: "▼"; }}
+.fl-corpo {{ max-height: 32vh; overflow-y: auto; padding: 0 12px 12px; }}
+.fl-item {{ font-size: 17px; font-weight: 600; color: {TEXTO}; padding: 6px 10px; margin-top: 6px;
+            border-radius: 10px; background: #f5f8fa; border-left: 5px solid #b27600; }}
+.fl-item[data-tipo="remarcado"], .fl-item[data-tipo="espera"] {{ border-left-color: #c62828; }}
+.fl-item[data-tipo="alta"] {{ border-left-color: #4a3aa7; }}
+.fl-item.novo {{ animation: fl-entrar .7s ease-out; background: #fff8e6; }}
+.fl-selo {{ background: {TEAL}; color: #fff; border-radius: 999px; padding: 1px 8px;
+            font-size: 14px; font-weight: 800; }}
+.fl-badge {{ background: #c62828; color: #fff; border-radius: 999px; padding: 2px 10px;
+             font-size: 15px; margin-left: 6px; animation: fl-pulsar 1.4s ease-in-out 3; }}
+.fl-mais, .fl-vazio {{ font-size: 17px; color: {TEXTO_2}; padding: 8px 4px 0; }}
+@keyframes fl-entrar {{ from {{ transform: translateX(60px); opacity: 0; }}
+                        to {{ transform: translateX(0); opacity: 1; }} }}
+@keyframes fl-pulsar {{ 50% {{ transform: scale(1.15); }} }}
+@media (prefers-reduced-motion: reduce) {{ .fl-item.novo, .fl-badge {{ animation: none; }} }}
+
 /* ---------- Tabelas ---------- */
 .tabela-grande {{ width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid {BORDA};
                  border-radius: 12px; overflow: hidden; }}
@@ -409,24 +435,27 @@ def lista_poltronas(estado: pd.DataFrame, hhmm):
     tabela(pd.DataFrame(linhas).drop(columns="_ordem"))
 
 
-# Notificação no canto: (ícone, tempo na tela). Quanto mais grave, mais tempo fica.
+# Notificação no canto: (ícone, tempo na tela). Todas ficam ~10 s; remarcado fica até fechar.
 NOTIFICACAO = {
-    "remarcado": ("❌", "infinite"),  # fica até alguém fechar
+    "remarcado": ("❌", "infinite"),
     "espera": ("⚠️", "long"),
     "limite": ("⚠️", "long"),
-    "alta": ("🔔", "short"),
+    "alta": ("🔔", "long"),
 }
 MAX_NOTIFICACOES = 3  # por vez, para não poluir a tela
+ICONE_ALERTA = {"remarcado": "❌", "espera": "⚠️", "limite": "⚠️", "alta": "🔔"}
 
 
-def notificar_novos(alertas: list[dict], contexto: str) -> int:
-    """Mostra no canto da tela só os alertas NOVOS (cada um uma única vez).
+def notificar_novos(alertas: list[dict], contexto: str) -> set[str]:
+    """Notificação no canto para os alertas que COMEÇARAM agora.
 
-    `contexto` separa as listas de "já mostrados" (ex.: agenda escolhida e dia gerado).
-    Devolve quantos alertas novos apareceram.
+    Compara com os alertas da tela anterior: um alerta que continua ativo não se repete,
+    mas se ele acabar e voltar (ou se a hora voltar), a notificação aparece de novo.
+    Devolve os ids dos alertas novos (para destacar no quadro flutuante).
     """
-    vistos = st.session_state.setdefault("alertas_vistos", {}).setdefault(contexto, set())
-    novos = [a for a in alertas if a["id"] not in vistos]
+    anteriores = st.session_state.setdefault("alertas_ativos", {})
+    antes = anteriores.get(contexto, set())
+    novos = [a for a in alertas if a["id"] not in antes]
     for a in novos[:MAX_NOTIFICACOES]:
         icone, duracao = NOTIFICACAO[a["tipo"]]
         # Texto curto: a notificação corta mensagens longas (o completo fica na central)
@@ -434,10 +463,40 @@ def notificar_novos(alertas: list[dict], contexto: str) -> int:
     if len(novos) > MAX_NOTIFICACOES:
         resto = len(novos) - MAX_NOTIFICACOES
         # (não começa com "+", que o markdown transformaria em item de lista)
-        st.toast(f"Mais {resto} alerta{'s' if resto > 1 else ''} na Central de alertas",
+        st.toast(f"Mais {resto} alerta{'s' if resto > 1 else ''} no quadro de alertas",
                  icon="🔔", duration="long")
-    vistos.update(a["id"] for a in novos)
-    return len(novos)
+    anteriores[contexto] = {a["id"] for a in alertas}
+    return {a["id"] for a in novos}
+
+
+def quadro_flutuante(alertas: list[dict], novos: set[str], maximo: int = 4):
+    """Quadro de alertas fixo no canto inferior direito (sempre visível no Painel).
+
+    Abre e fecha com um clique; abre sozinho quando chega alerta novo. Os novos entram
+    deslizando e ganham o selo "novo".
+    """
+    if not alertas:
+        corpo, resumo_txt = '<div class="fl-vazio">✅ Nenhum alerta agora</div>', "✅ Sem alertas"
+    else:
+        itens = []
+        for a in alertas[:maximo]:
+            classe = "fl-item novo" if a["id"] in novos else "fl-item"
+            selo = '<span class="fl-selo">novo</span>' if a["id"] in novos else ""
+            itens.append(f'<div class="{classe}" data-tipo="{a["tipo"]}">'
+                         f'<span aria-hidden="true">{ICONE_ALERTA[a["tipo"]]}</span> '
+                         f'{html.escape(a["curto"])} {selo}</div>')
+        if len(alertas) > maximo:
+            itens.append(f'<div class="fl-mais">e mais {len(alertas) - maximo} na '
+                         'Central de alertas, logo abaixo</div>')
+        corpo = "".join(itens)
+        n_novos = len(novos)
+        resumo_txt = (f"🔔 {len(alertas)} alerta{'s' if len(alertas) > 1 else ''} agora"
+                      + (f' <span class="fl-badge">{n_novos} novo{"s" if n_novos > 1 else ""}'
+                         '</span>' if n_novos else ""))
+    aberto = " open" if novos else ""
+    st.markdown(f'<details class="flutuante"{aberto} role="region" aria-label="Alertas">'
+                f'<summary>{resumo_txt}</summary><div class="fl-corpo">{corpo}</div></details>',
+                unsafe_allow_html=True)
 
 
 def caixa_alerta(tipo: str, texto: str):

@@ -57,3 +57,53 @@ def test_kpis_do_interior_no_dia_padrao():
 def test_extremos_da_fracao(frac):
     dia = gerar_dia(Premissas(frac_interior=frac))
     assert dia["interior"].mean() == frac
+
+
+# ---------------------------------------------------------------------------
+# Fase 2: otimizador com o transporte do interior
+# ---------------------------------------------------------------------------
+from ganhos import jornada  # noqa: E402
+from otimizador import otimizar  # noqa: E402
+
+
+@pytest.fixture(scope="module", params=[False, True], ids=["dia normal", "sexta-feira"])
+def proposta(request):
+    prem = Premissas(sexta_feira=request.param)
+    dia = gerar_dia(prem)
+    return prem, dia, otimizar(dia, prem)
+
+
+def test_ninguem_do_interior_perde_o_transporte(proposta):
+    prem, _, r = proposta
+    ag = r["agenda"]
+    intr = ag[ag["interior"].astype(bool)]
+    assert r["ok"] and not ag["remarcado"].any()
+    assert not perdeu_transporte(ag).any()
+    # Folga mínima antes do retorno do transporte
+    assert (intr["sai"] <= intr["retorno_min"] - prem.folga_transporte).all()
+
+
+def test_interior_chega_com_o_transporte(proposta):
+    _, _, r = proposta
+    intr = r["agenda"][r["agenda"]["interior"].astype(bool)]
+    assert (intr["chegada"] == intr["chegada_transporte"]).all()
+    assert (intr["senta"] >= intr["chegada_transporte"]).all()
+
+
+def test_prioridade_do_interior_nao_prejudica_a_capital(proposta):
+    prem, dia, r = proposta
+    hoje = simular_atual(dia, prem)
+    j = jornada(hoje, r["agenda"]).dropna(subset=["tempo_hoje", "tempo_proposta"])
+    do_interior = j["paciente"].isin(dia.loc[dia["interior"], "paciente"])
+    # Os dois grupos ficam, em média, menos tempo na unidade do que hoje
+    assert j.loc[do_interior, "tempo_proposta"].mean() < j.loc[do_interior, "tempo_hoje"].mean()
+    assert j.loc[~do_interior, "tempo_proposta"].mean() < j.loc[~do_interior, "tempo_hoje"].mean()
+
+
+def test_tempo_do_interior_conta_desde_o_transporte():
+    prem = Premissas()
+    dia = gerar_dia(prem)
+    hoje = simular_atual(dia, prem)
+    j = jornada(hoje, hoje).set_index("paciente")
+    pac = hoje[hoje["interior"] & ~hoje["remarcado"]].iloc[0]
+    assert j.loc[pac["paciente"], "tempo_hoje"] == pac["sai"] - pac["chegada_transporte"]

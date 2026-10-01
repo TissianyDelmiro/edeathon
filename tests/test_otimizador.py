@@ -4,6 +4,7 @@ import pytest
 
 from dados import Premissas, gerar_dia
 from otimizador import SLOT, otimizar
+from simulacao_atual import simular_atual
 
 
 def _max_simultaneo(inicios, fins):
@@ -70,11 +71,22 @@ def test_duracoes_nao_alteradas(resultado):
 
 
 def test_capela_suavizada(resultado):
-    prem, _, r = resultado
+    """A capela fica mais equilibrada que hoje.
+
+    Com a prioridade dos pacientes do interior (que chegam cedo no transporte), a manhã
+    fica um pouco mais carregada: o pico pode chegar a 1,6x a média por hora, mas fica
+    abaixo da capacidade e bem abaixo do pico de hoje (capela lotada de manhã).
+    """
+    prem, dia, r = resultado
     ag = r["agenda"]
     por_hora = ag.groupby((ag["inicio_preparo"] - prem.inicio_turno) // 60)["preparo_min"].sum()
     media = ag["preparo_min"].sum() / 11
-    assert por_hora.max() <= 1.2 * media
+    assert por_hora.max() <= 1.6 * media
+    assert por_hora.max() < 60 * prem.capacidade_capela
+    hoje = simular_atual(dia, prem)
+    pico_hoje = hoje.groupby((hoje["inicio_preparo"] - prem.inicio_turno) // 60)[
+        "preparo_min"].sum().max()
+    assert por_hora.max() < pico_hoje
 
 
 def test_paciente_que_nao_cabe_fica_fora():
