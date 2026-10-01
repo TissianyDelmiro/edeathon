@@ -37,7 +37,7 @@ import pandas as pd
 from ortools.sat.python import cp_model
 
 from dados import Premissas
-from simulacao_atual import COLUNAS_AGENDA
+from simulacao_atual import COLUNAS_INTERIOR, colunas_da_agenda
 
 SLOT = 10  # minutos por slot da agenda
 
@@ -175,8 +175,8 @@ def otimizar(dia: pd.DataFrame, prem: Premissas, limite_s: float = 20.0) -> dict
         return resultado
 
     # Montar a agenda a partir da solução
-    ag = dia[["paciente", "perfil", "protocolo", "limite_min", "preparo_min",
-              "infusao_min"]].copy().reset_index(drop=True)
+    ag = dia[["paciente", "perfil", "protocolo", "limite_min", "preparo_min", "infusao_min"]
+             + [c for c in COLUNAS_INTERIOR if c in dia.columns]].copy().reset_index(drop=True)
     ok = np.array([solver.boolean_value(x) for x in presente])
     s_inf = np.array([solver.value(v) for v in inicio_inf], dtype=float)
     s_prep = np.array([solver.value(v) for v in inicio_prep], dtype=float)
@@ -197,7 +197,7 @@ def otimizar(dia: pd.DataFrame, prem: Premissas, limite_s: float = 20.0) -> dict
     ag["poltrona"] = _atribuir_recursos(ag["senta"], ag["sai"], prem.n_poltronas)
     ag["posto_capela"] = _atribuir_recursos(ag["inicio_preparo"], ag["fim_preparo"],
                                             prem.capacidade_capela)
-    ag = ag[COLUNAS_AGENDA].sort_values("inicio_infusao", na_position="last").reset_index(drop=True)
+    ag = ag[colunas_da_agenda(ag)].sort_values("inicio_infusao", na_position="last").reset_index(drop=True)
     resultado["agenda"] = ag
     resultado["remarcados"] = ag.loc[ag["inicio_infusao"].isna(), "paciente"].tolist()
     resultado["pico_capela_hora"] = solver.value(pico)

@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from dados import Premissas
+from simulacao_atual import perdeu_transporte
 
 MEIO_DIA = 13 * 60  # divisão manhã x tarde da capela
 
@@ -64,7 +65,12 @@ def calcular_kpis(ag: pd.DataFrame, prem: Premissas, alta: int) -> dict:
     t_fim = int(max(fim, np.nanmax(ag["sai"]) if len(atend) else fim)) + 1
     na_unidade = _ocupacao_por_minuto(atend["chegada"], atend["sai"], ini, t_fim)
     por_grupo = pd.Series(t2, index=atend.index).groupby(atend["perfil"]).mean()
+    interior = (ag["interior"].astype(bool) if "interior" in ag.columns
+                else pd.Series(False, index=ag.index))
     return {
+        "pacientes_interior": int(interior.sum()),
+        "interior_perdeu_transporte": int(perdeu_transporte(ag).sum()),
+        "interior_remarcados": int((interior & ag["remarcado"]).sum()),
         "pacientes_atendidos": len(atend),
         "remarcados": int(ag["remarcado"].sum()),
         "espera_media_rapido": float(por_grupo.get("Rápido", np.nan)),

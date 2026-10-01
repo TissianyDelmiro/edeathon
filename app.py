@@ -918,6 +918,30 @@ with aba_premissas:
                 "Tipo de tratamento": tab_lim["grupo"].map(ROTULO),
             }))
 
+        ui.titulo_bloco("🚐 Pacientes do interior", (
+            "Muitos pacientes vêm do interior no **transporte da prefeitura**: chegam cedo e "
+            "precisam voltar num horário fixo. Se a poltrona só libera depois disso, o "
+            "paciente **perde o transporte**.\n\n"
+            "Os horários são sorteados dentro das faixas abaixo (pacientes fictícios). "
+            "Todos os valores são **suposições a validar** com o setor."))
+        c1, c2, c3 = st.columns(3)
+        pct_int = c1.number_input(f"Pacientes do interior, em % ({SUP})", 0, 100,
+                                  int(round(prem.frac_interior * 100)))
+        chega_de = c2.time_input("Transporte chega a partir de",
+                                 time(prem.transporte_chega_de // 60,
+                                      prem.transporte_chega_de % 60), step=900)
+        chega_ate = c3.time_input("…e até", time(prem.transporte_chega_ate // 60,
+                                                prem.transporte_chega_ate % 60), step=900)
+        c1, c2, c3 = st.columns(3)
+        folga_t = c1.number_input(f"Folga antes do retorno, em min ({SUP})", 0, 120,
+                                  prem.folga_transporte)
+        volta_de = c2.time_input("Transporte volta a partir de",
+                                 time(prem.transporte_volta_de // 60,
+                                      prem.transporte_volta_de % 60), step=900)
+        volta_ate = c3.time_input("…e até", time(prem.transporte_volta_ate // 60,
+                                                prem.transporte_volta_ate % 60), step=900,
+                                  key="volta_ate")
+
         ui.titulo_bloco("🎯 Meta de espera", (
             "Tempo máximo desejado para o paciente ficar **sentado esperando a bolsa**. "
             "Usada nos gráficos e indicadores da aba **O que melhorou**."))
@@ -972,6 +996,11 @@ with aba_premissas:
         ini_min, fim_min = ini_t.hour * 60 + ini_t.minute, fim_t.hour * 60 + fim_t.minute
         if fim_min - ini_min < 120:
             erros.append("O fim do turno precisa ser pelo menos 2 horas depois do início.")
+        if (chega_ate.hour * 60 + chega_ate.minute < chega_de.hour * 60 + chega_de.minute
+                or volta_ate.hour * 60 + volta_ate.minute
+                < volta_de.hour * 60 + volta_de.minute):
+            erros.append("Nos horários do transporte, o \"até\" precisa ser depois do "
+                         "\"a partir de\".")
         if editado[["Preparo (min)", "Infusão (min)"]].isna().any().any():
             erros.append("Preencha todos os tempos de preparo e de infusão.")
         if erros:
@@ -991,6 +1020,12 @@ with aba_premissas:
                     "pre": float(r.iloc[1]) / 100, "atraso": float(r.iloc[2])}
                     for _, r in calib_editada.iterrows()},
                 sexta_feira=bool(sexta), folga_limite=int(folga), meta_espera=int(meta),
+                frac_interior=pct_int / 100,
+                transporte_chega_de=chega_de.hour * 60 + chega_de.minute,
+                transporte_chega_ate=chega_ate.hour * 60 + chega_ate.minute,
+                transporte_volta_de=volta_de.hour * 60 + volta_de.minute,
+                transporte_volta_ate=volta_ate.hour * 60 + volta_ate.minute,
+                folga_transporte=int(folga_t),
                 atraso_liberacao_dispersao=float(disp), semente=int(sem))
             st.success("✅ Premissas salvas. Calculando o novo dia…")
             st.rerun()

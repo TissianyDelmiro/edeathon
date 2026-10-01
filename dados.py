@@ -1,4 +1,4 @@
-﻿"""
+"""
 Premissas do protótipo, tabela de protocolos e gerador do dia sintético.
 
 REGRAS DO EVENTO:
@@ -115,6 +115,13 @@ class Premissas:
     folga_limite: int = 30  # proposta: chegar à triagem pelo menos X min antes do limite
     # Meta de espera na poltrona (min): usada nos indicadores e gráficos de meta
     meta_espera: int = 30
+    # Pacientes do interior (transporte da prefeitura). Todos "suposição a validar".
+    frac_interior: float = 0.40  # fração dos pacientes do dia que vem do interior
+    transporte_chega_de: int = 6 * 60 + 30  # o transporte chega a Fortaleza entre...
+    transporte_chega_ate: int = 7 * 60 + 30  # ...6h30 e 7h30
+    transporte_volta_de: int = 15 * 60  # e volta para o interior entre...
+    transporte_volta_ate: int = 16 * 60 + 30  # ...15h00 e 16h30
+    folga_transporte: int = 30  # proposta: liberar a poltrona X min antes do retorno
     # Tempos de processo (minutos)
     alta_atual: int = 15  # do fim da infusão até liberar a poltrona no Tasy (hoje)
     alta_antecipada: int = 5  # idem, com a alta preparada antes do fim da infusão
@@ -152,6 +159,8 @@ def gerar_dia(prem: Premissas) -> pd.DataFrame:
     Colunas:
       paciente, perfil, preparo_min, infusao_min, chegada_min (horário de chegada HOJE),
       e sorteios usados na calibração do cenário atual (u_pre, u_antecedencia, z_atraso).
+      Interior: interior (sim/não), chegada_transporte (quando o transporte chega a
+      Fortaleza) e retorno_min (quando o transporte volta). Vazios para quem é da capital.
     Os sorteios ficam guardados para que mudar a calibração não mude o dia.
     """
     rng = np.random.default_rng(prem.semente)
@@ -193,11 +202,29 @@ def gerar_dia(prem: Premissas) -> pd.DataFrame:
             chegadas[i] = rng.triangular(dez_h, dez_h, fim_janela)
     chegadas = np.floor(chegadas)
 
+    # 2b) Pacientes do interior. Gerador separado: o dia calibrado não muda.
+    #     Eles chegam cedo no transporte da prefeitura, mas HOJE são atendidos na vez
+    #     deles (a hora de chegada à triagem é a mesma de qualquer paciente): ficam
+    #     esperando desde a chegada do transporte e podem perder o retorno.
+    rng_int = np.random.default_rng([prem.semente, 7])
+    n_int = int(round(min(max(prem.frac_interior, 0.0), 1.0) * n))
+    interior = np.isin(idx, rng_int.permutation(n)[:n_int])
+    passo = 15  # horários do transporte em múltiplos de 15 min
+    chega_v = rng_int.integers(prem.transporte_chega_de // passo,
+                               prem.transporte_chega_ate // passo + 1, n) * passo
+    volta_v = rng_int.integers(prem.transporte_volta_de // passo,
+                               prem.transporte_volta_ate // passo + 1, n) * passo
+    chegada_transporte = np.where(interior, np.minimum(chega_v, chegadas), np.nan)
+    retorno = np.where(interior, volta_v, np.nan)
+
     df = pd.DataFrame({
         "perfil": perfis,  # grupo de tratamento (cor da folha do setor)
         "protocolo": protocolos,
         "limite_min": limites,  # horário limite para chegar à triagem com o farmacêutico
         "chegada_min": chegadas.astype(int),
+        "interior": interior,
+        "chegada_transporte": chegada_transporte,
+        "retorno_min": retorno,
         "u_pre": rng.random(n),
         "u_antecedencia": rng.random(n),
         "z_atraso": rng.standard_normal(n),
@@ -210,7 +237,8 @@ def gerar_dia(prem: Premissas) -> pd.DataFrame:
     df = df.sort_values(["chegada_min", "perfil"], kind="stable").reset_index(drop=True)
     df.insert(0, "paciente", [f"PAC-{i + 1:03d}" for i in range(n)])
     return df[["paciente", "perfil", "protocolo", "limite_min", "preparo_min", "infusao_min",
-               "chegada_min", "u_pre", "u_antecedencia", "z_atraso"]]
+               "chegada_min", "interior", "chegada_transporte", "retorno_min",
+               "u_pre", "u_antecedencia", "z_atraso"]]
 
 
 def hhmm(minutos) -> str:

@@ -33,6 +33,20 @@ COLUNAS_AGENDA = [
     "chegada", "senta", "liberacao", "inicio_preparo", "fim_preparo", "bolsa_chega",
     "inicio_infusao", "fim_infusao", "sai", "poltrona", "posto_capela",
 ]
+# Colunas dos pacientes do interior (presentes quando o dia sintético as traz)
+COLUNAS_INTERIOR = ["interior", "chegada_transporte", "retorno_min"]
+
+
+def colunas_da_agenda(dia: pd.DataFrame) -> list[str]:
+    """Colunas padrão da agenda + as do interior, se o dia tiver."""
+    return COLUNAS_AGENDA + [c for c in COLUNAS_INTERIOR if c in dia.columns]
+
+
+def perdeu_transporte(ag: pd.DataFrame) -> pd.Series:
+    """Paciente do interior atendido que libera a poltrona depois do retorno do transporte."""
+    if "interior" not in ag.columns:
+        return pd.Series(False, index=ag.index)
+    return ag["interior"].astype(bool) & (ag["sai"] > ag["retorno_min"])
 
 
 def _servidores_fifo(liberacoes: np.ndarray, duracoes: np.ndarray, n_servidores: int,
@@ -70,8 +84,8 @@ def simular_atual(dia: pd.DataFrame, prem: Premissas) -> pd.DataFrame:
     Pacientes remarcados ficam na agenda com `remarcado=True` e sem horários de preparo,
     poltrona ou infusão (só a chegada, para o Painel mostrar o que aconteceu).
     """
-    ag = dia[["paciente", "perfil", "protocolo", "limite_min", "preparo_min",
-              "infusao_min"]].copy()
+    ag = dia[["paciente", "perfil", "protocolo", "limite_min", "preparo_min", "infusao_min"]
+             + [c for c in COLUNAS_INTERIOR if c in dia.columns]].copy()
     ag["chegada"] = dia["chegada_min"].astype(float)
     ag["remarcado"] = ag["chegada"] > ag["limite_min"]
     ag["liberacao"] = horario_liberacao(dia, prem)
@@ -83,7 +97,7 @@ def simular_atual(dia: pd.DataFrame, prem: Premissas) -> pd.DataFrame:
     ag.loc[ag["remarcado"], "liberacao"] = np.nan
     at = ag.index[~ag["remarcado"]]  # só quem foi atendido usa capela e poltrona
     if len(at) == 0:
-        return ag[COLUNAS_AGENDA]
+        return ag[colunas_da_agenda(ag)]
 
     # Capela: fila única por ordem de liberação
     ini_prep, posto = _servidores_fifo(ag.loc[at, "liberacao"].to_numpy(),
@@ -114,4 +128,4 @@ def simular_atual(dia: pd.DataFrame, prem: Premissas) -> pd.DataFrame:
     ag.loc[at, "fim_infusao"] = ag.loc[at, "inicio_infusao"] + ag.loc[at, "infusao_min"]
     ag.loc[at, "sai"] = sai
     ag.loc[at, "poltrona"] = poltrona.astype(int)
-    return ag[COLUNAS_AGENDA]
+    return ag[colunas_da_agenda(ag)]
