@@ -23,7 +23,13 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit as st
 
-import ganhos as G
+# Antes de importar os módulos do app: recarrega os que mudaram no disco (evita rodar o
+# app.py novo com módulos antigos na memória depois de um deploy no Streamlit Cloud)
+import recarregar
+
+recarregar.atualizar()
+
+import ganhos as G  # noqa: E402
 import indicadores as I
 import ocorrencias as O
 import painel as P
