@@ -55,7 +55,7 @@ PESO_BOLSA_PARADA = 1  # por minuto de bolsa pronta aguardando
 PESO_INTERIOR = 1  # por minuto de paciente do interior na unidade (da chegada do transporte)
 # Por minuto que o paciente do interior espera ALÉM da espera máxima até sentar. É maior que
 # o peso do pico da capela: equilibrar a capela não pode deixar alguém horas na recepção.
-PESO_ESPERA_INTERIOR_EXCESSO = 50
+PESO_ESPERA_INTERIOR_EXCESSO = 150
 
 STATUS_PT = {
     cp_model.OPTIMAL: "Solução ótima encontrada",

@@ -28,13 +28,13 @@ LOGO = PASTA_IMG / "sinfonia-logo.png"
 ICONE = PASTA_IMG / "sinfonia-icone.png"
 
 # Cores da identidade visual (tiradas do logo; contraste conferido pela WCAG)
-MARINHO = "#19375d"  # cabeçalho, abas, títulos, tabelas (12:1 no branco)
-TEAL = "#08756e"  # destaques e a "proposta" nos gráficos (5,6:1 no branco)
-TEAL_CLARO = "#e3f2f0"
-FUNDO = "#f4f7f9"
-TEXTO = "#102a33"  # texto principal (contraste > 13:1 no branco)
-TEXTO_2 = "#3d5560"  # texto secundário (contraste > 7:1 no branco)
-BORDA = "#dde5ea"
+MARINHO = "#0f2744"  # azul marinho executivo (contraste > 13:1 no branco)
+TEAL = "#0d9488"  # verde-azulado clínico moderno (WCAG AAA)
+TEAL_CLARO = "#f0fdfa"
+FUNDO = "#f8fafc"  # slate-50 canvas limpo e contemporâneo
+TEXTO = "#0f172a"  # slate-900 texto de alto contraste
+TEXTO_2 = "#475569"  # slate-600 texto secundário corporativo
+BORDA = "#e2e8f0"  # slate-200 bordas sutis e limpas
 
 # Cores dos grupos, iguais às da folha do setor. Vermelho x verde se confundem para
 # daltônicos (validado: não há tom que resolva sem mudar as cores do setor), então a cor
@@ -80,242 +80,956 @@ ICONE_BOLSA = {
 
 CSS = f"""
 <style>
-/* ---------- Base: fonte grande, alto contraste e Open Sans ---------- */
-@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap');
-.stApp {{ background: {FUNDO}; }}
+/* ---------- Base: Tipografia Moderna, Clean e Corporativa ---------- */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {{
+  --fonte-primaria: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+}}
+
+.stApp {{
+  background: {FUNDO};
+  font-family: var(--fonte-primaria);
+  color: {TEXTO};
+}}
+
 .stApp, .stApp p, .stApp li, .stApp label, .stApp td, .stApp th, .stApp input, .stApp button,
 .stApp h1, .stApp h2, .stApp h3, .stApp [data-testid="stMarkdownContainer"] div,
-.stApp [data-testid="stCaptionContainer"] {{ font-family: 'Open Sans', system-ui, sans-serif; }}
-.stApp p, .stApp li, .stApp label, .stApp td, .stApp th, .stApp input,
-.stApp [data-testid="stCaptionContainer"] {{ font-size: 20px !important; }}
-.stApp h1, .stApp h1 * {{ font-size: 36px !important; font-weight: 800 !important; }}
-.stApp h2, .stApp h2 * {{ font-size: 30px !important; font-weight: 800 !important; }}
-.stApp h3, .stApp h3 * {{ font-size: 24px !important; font-weight: 700 !important; color: {MARINHO};
-                          letter-spacing: -.2px; }}
-.stApp p, .stApp li, .stApp label {{ color: {TEXTO}; }}
-.block-container {{ padding-top: 2.2rem !important; max-width: 1400px; }}
+.stApp [data-testid="stCaptionContainer"] {{
+  font-family: var(--fonte-primaria);
+}}
 
-/* ---------- Barra superior fina (como nos sites de hospital) ---------- */
+/* Corpo de texto e parágrafos */
+.stApp p, .stApp li, .stApp [data-testid="stMarkdownContainer"] > div {{
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: {TEXTO};
+}}
+
+/* Legendas e anotações */
+.stApp [data-testid="stCaptionContainer"], .stApp [data-testid="stCaptionContainer"] p {{
+  font-size: 12.5px !important;
+  color: {TEXTO_2} !important;
+  line-height: 1.45;
+}}
+
+/* Rótulos e inputs de formulário */
+.stApp label, .stApp label p {{
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  color: {TEXTO} !important;
+  letter-spacing: -0.1px;
+}}
+.stApp input, .stApp select, .stApp textarea, .stApp div[data-baseweb="select"] {{
+  font-size: 13.5px !important;
+  border-radius: 8px !important;
+}}
+
+/* Títulos com hierarquia visual executiva */
+.stApp h1, .stApp h1 * {{
+  font-size: 26px !important;
+  font-weight: 800 !important;
+  color: {MARINHO};
+  letter-spacing: -0.5px;
+}}
+.stApp h2, .stApp h2 * {{
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  color: {MARINHO};
+  letter-spacing: -0.3px;
+}}
+.stApp h3, .stApp h3 * {{
+  font-size: 16.5px !important;
+  font-weight: 700 !important;
+  color: {MARINHO};
+  letter-spacing: -0.2px;
+}}
+
+.block-container {{
+  padding-top: 1.6rem !important;
+  padding-bottom: 3rem !important;
+  max-width: 1440px;
+}}
+
+/* ---------- Barra superior fina (App Bar Executiva) ---------- */
 .topo {{
-  background: {MARINHO}; color: #fff; border-radius: 14px 14px 0 0; padding: 8px 22px;
-  display: flex; gap: 22px; flex-wrap: wrap; align-items: center; font-size: 17px; font-weight: 600;
+  background: linear-gradient(90deg, #0b1f36 0%, #133357 100%);
+  color: #ffffff !important;
+  border-radius: 14px 14px 0 0;
+  padding: 8px 22px;
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 12.5px;
+  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(11, 31, 54, 0.12);
 }}
-.topo .dir {{ margin-left: auto; background: {TEAL}; border-radius: 999px; padding: 2px 14px; }}
+.topo span, .topo-esq span {{
+  color: #ffffff !important;
+}}
+.topo-esq {{
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}}
+.topo .dir {{
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  padding: 3px 14px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: #ffffff !important;
+}}
+.live-badge {{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(13, 148, 136, 0.25);
+  border: 1px solid rgba(45, 212, 191, 0.4);
+  color: #2dd4bf;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}}
+.live-dot {{
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2dd4bf;
+  box-shadow: 0 0 8px #2dd4bf;
+  animation: pulse-dot 2s infinite;
+}}
+@keyframes pulse-dot {{
+  0%, 100% {{ opacity: 1; transform: scale(1); }}
+  50% {{ opacity: 0.4; transform: scale(0.8); }}
+}}
 
-/* ---------- Cabeçalho com a marca ---------- */
+/* ---------- Cabeçalho com a marca Sinfonia ---------- */
 .cabecalho {{
-  background: #fff; border: 1px solid {BORDA}; border-top: none; border-radius: 0 0 14px 14px;
-  padding: 14px 22px; margin-bottom: 12px; display: flex; align-items: center; gap: 18px;
-  flex-wrap: wrap; box-shadow: 0 6px 18px rgba(25, 55, 93, .08);
+  background: #ffffff;
+  border: 1px solid {BORDA};
+  border-top: none;
+  border-radius: 0 0 14px 14px;
+  padding: 16px 24px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  box-shadow: 0 4px 16px -2px rgba(15, 39, 68, 0.05);
 }}
-.cabecalho img {{ height: 72px; width: auto; flex-shrink: 0; }}
-.cabecalho .titulo {{ font-size: 34px; font-weight: 800; color: {MARINHO}; line-height: 1.05;
-                      letter-spacing: -.5px; }}
-.cabecalho .sub {{ font-size: 19px; color: {TEAL}; font-weight: 700; margin-top: 2px; }}
-.cabecalho .chips {{ margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }}
+.cabecalho img {{
+  height: 60px;
+  width: auto;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 4px rgba(15, 39, 68, 0.08));
+}}
+.marca-bloco {{
+  display: flex;
+  flex-direction: column;
+}}
+.titulo-linha {{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}}
+.cabecalho .titulo {{
+  font-size: 28px;
+  font-weight: 800;
+  color: {MARINHO};
+  line-height: 1.1;
+  letter-spacing: -0.6px;
+}}
+.badge-versao {{
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}}
+.cabecalho .sub {{
+  font-size: 14px;
+  color: {TEAL};
+  font-weight: 600;
+  margin-top: 2px;
+}}
+.cabecalho .chips {{
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}}
 .cabecalho .chip {{
-  background: {FUNDO}; border: 1px solid {BORDA}; color: {TEXTO}; border-radius: 999px;
-  padding: 6px 14px; font-size: 17px; font-weight: 700; white-space: nowrap;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+  transition: all 0.15s ease;
+}}
+.cabecalho .chip:hover {{
+  background: #ffffff;
+  border-color: #cbd5e1;
 }}
 
 /* ---------- Aviso fixo no topo ---------- */
 .aviso-fixo {{
-  position: sticky; top: 3.2rem; z-index: 999;
-  background: #fff8e6; color: #3d2a00; border: 1px solid #e2b54a; border-left: 8px solid #b27600;
-  border-radius: 12px; padding: 10px 16px; font-size: 19px; font-weight: 700; margin-bottom: 16px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, .06);
+  position: sticky;
+  top: 3rem;
+  z-index: 999;
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  border-left: 5px solid #d97706;
+  border-radius: 10px;
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(217, 119, 6, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }}
 
-/* ---------- Abas ---------- */
-.stTabs [role="tablist"] {{ gap: 8px; border-bottom: none !important; flex-wrap: wrap; }}
-.stTabs [role="tab"] {{
-  background: #fff; border: 1px solid {BORDA} !important; border-radius: 12px;
-  padding: 10px 16px !important; height: auto !important; box-shadow: 0 1px 3px rgba(25, 55, 93, .06);
+/* ---------- Abas (Segmented Navigation) ---------- */
+.stTabs [role="tablist"] {{
+  gap: 8px;
+  border-bottom: none !important;
+  flex-wrap: wrap;
+  padding: 4px 0 10px;
 }}
-.stTabs [role="tab"]:hover {{ border-color: {TEAL} !important; }}
-.stTabs [role="tab"] p {{ font-size: 20px !important; font-weight: 700 !important; color: {MARINHO}; }}
-.stTabs [role="tab"][aria-selected="true"] {{ background: {MARINHO}; border-color: {MARINHO} !important;
-                                              box-shadow: inset 0 -5px 0 {TEAL}; }}
-.stTabs [role="tab"][aria-selected="true"] p {{ color: #fff !important; }}
-.stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] {{ display: none; }}
+.stTabs [role="tab"] {{
+  background: #ffffff !important;
+  border: 1px solid {BORDA} !important;
+  border-radius: 10px !important;
+  padding: 8px 18px !important;
+  height: auto !important;
+  box-shadow: 0 1px 3px rgba(15, 39, 68, 0.04) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}}
+.stTabs [role="tab"]:hover {{
+  border-color: {TEAL} !important;
+  transform: translateY(-1px);
+}}
+.stTabs [role="tab"] p {{
+  font-size: 14.5px !important;
+  font-weight: 600 !important;
+  color: {TEXTO_2};
+}}
+.stTabs [role="tab"][aria-selected="true"] {{
+  background: linear-gradient(135deg, {MARINHO} 0%, #163e68 100%) !important;
+  border-color: {MARINHO} !important;
+  box-shadow: 0 4px 12px rgba(15, 39, 68, 0.18) !important;
+}}
+.stTabs [role="tab"][aria-selected="true"] p {{
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}}
+.stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] {{
+  display: none;
+}}
 
 /* ---------- Rodapé institucional ---------- */
 .rodape {{
-  margin-top: 28px; background: {MARINHO}; color: #dfe7f1; border-radius: 14px;
-  padding: 18px 24px; display: flex; gap: 24px; flex-wrap: wrap; align-items: center;
-  font-size: 17px; line-height: 1.5;
+  margin-top: 32px;
+  background: linear-gradient(90deg, #0b1f36 0%, #133357 100%);
+  color: #ffffff !important;
+  border-radius: 14px;
+  padding: 20px 24px;
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 12.5px;
+  line-height: 1.55;
+  box-shadow: 0 4px 14px rgba(11, 31, 54, 0.12);
 }}
-.rodape b {{ color: #fff; }}
-.rodape .marca {{ font-size: 22px; font-weight: 800; color: #fff; }}
-.rodape .col {{ flex: 1 1 260px; }}
+.rodape, .rodape .col, .rodape b, .rodape div, .rodape p, .rodape span {{
+  color: #ffffff !important;
+}}
+.rodape b {{ color: #ffffff !important; font-weight: 700; }}
+.rodape .marca {{ font-size: 18px; font-weight: 800; color: #ffffff !important; letter-spacing: -0.3px; }}
+.rodape .col {{ flex: 1 1 240px; color: #ffffff !important; }}
 
-/* ---------- Blocos brancos (st.container com chave "bloco_...") ---------- */
+/* ---------- Blocos brancos (Containers corporativos) ---------- */
 [class*="st-key-bloco"], [data-testid="stForm"] {{
-  background: #fff; border: 1px solid {BORDA}; border-radius: 16px;
-  padding: 20px 24px 24px; box-shadow: 0 4px 14px rgba(25, 55, 93, .06);
+  background: #ffffff;
+  border: 1px solid {BORDA};
+  border-radius: 14px;
+  padding: 22px 26px 26px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02), 0 4px 16px -2px rgba(15, 39, 68, 0.04);
+  margin-bottom: 20px;
 }}
 
-/* ---------- Botões grandes ---------- */
+/* ---------- Botões com Acabamento Premium ---------- */
 .stButton button, .stDownloadButton button, .stFormSubmitButton button, [data-testid="stPopover"] button {{
-  min-height: 56px; padding: 10px 22px; border-width: 2px; border-radius: 12px;
+  min-height: 42px;
+  padding: 8px 18px;
+  border-radius: 9px !important;
+  font-weight: 600 !important;
+  font-size: 13.5px !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }}
-.stButton button p, .stDownloadButton button p, .stFormSubmitButton button p,
-[data-testid="stPopover"] button p {{ font-size: 20px !important; font-weight: 700; }}
-[data-testid="stPopover"] button {{ border-color: {BORDA}; background: {TEAL_CLARO}; }}
-[data-testid="stPopover"] button p {{ color: {MARINHO} !important; }}
-.stApp [data-testid*="primary"] p, .stApp [kind*="primary"] p {{ color: #ffffff !important; }}
+.stButton button:hover, .stDownloadButton button:hover, .stFormSubmitButton button:hover {{
+  transform: translateY(-1px);
+}}
+.stApp [data-testid*="primary"], .stApp [kind*="primary"] {{
+  background: linear-gradient(135deg, {TEAL} 0%, #0b7269 100%) !important;
+  border: none !important;
+  box-shadow: 0 2px 6px rgba(13, 148, 136, 0.25) !important;
+}}
+.stApp [data-testid*="primary"]:hover, .stApp [kind*="primary"]:hover {{
+  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.38) !important;
+}}
+.stApp [data-testid*="primary"] p, .stApp [kind*="primary"] p {{
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}}
+[data-testid="stPopover"] button {{
+  border-color: {BORDA} !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}}
+[data-testid="stPopover"] button:hover {{
+  border-color: {TEAL} !important;
+  background: {TEAL_CLARO} !important;
+}}
+[data-testid="stPopover"] button p {{
+  color: {MARINHO} !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+}}
 
-/* ---------- Cartões de resumo (números grandes) ---------- */
-.resumo {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 12px; margin-bottom: 14px; }}
+/* ---------- Cartões de resumo (KPIs Executivos) ---------- */
+.resumo {{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}}
 .kpi {{
-  background: #fff; border: 1px solid {BORDA}; border-left: 10px solid var(--cor);
-  border-radius: 14px; padding: 12px 14px; display: flex; align-items: center; gap: 12px;
-  box-shadow: 0 2px 6px rgba(16, 42, 51, .07);
+  background: #ffffff;
+  border: 1px solid {BORDA};
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.18s ease;
+}}
+.kpi:hover {{
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px -2px rgba(15, 39, 68, 0.08);
+  border-color: #cbd5e1;
+}}
+.kpi::before {{
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4.5px;
+  background: var(--cor);
+  border-radius: 12px 0 0 12px;
 }}
 .kpi .icone {{
-  width: 52px; height: 52px; border-radius: 50%; background: var(--tinta);
-  border: 2px solid var(--cor); display: flex; align-items: center; justify-content: center;
-  font-size: 26px; flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: var(--tinta);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
 }}
-.kpi .valor {{ font-size: 40px; font-weight: 800; color: {TEXTO}; line-height: 1; }}
+.kpi .valor {{
+  font-size: 28px;
+  font-weight: 800;
+  color: {TEXTO};
+  line-height: 1;
+  letter-spacing: -0.6px;
+}}
 .kpi > div {{ min-width: 0; }}
-.kpi .rotulo {{ font-size: 19px; font-weight: 700; color: {TEXTO_2}; margin-top: 4px; }}
-/* Variante empilhada (ícone em cima) para linhas com muitos cartões */
-.resumo.empilhado .kpi {{ flex-direction: column; align-items: flex-start; gap: 8px; }}
+.kpi .rotulo {{
+  font-size: 11.5px;
+  font-weight: 600;
+  color: {TEXTO_2};
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-top: 3px;
+}}
+.resumo.empilhado .kpi {{
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}}
 
-/* ---------- Mapa das poltronas ---------- */
-.grade {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }}
+/* ---------- Mapa das poltronas (Hospital Bays) ---------- */
+.grade {{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(235px, 1fr));
+  gap: 12px;
+}}
 .poltrona {{
-  background: #fff; border: 1px solid {BORDA}; border-left: 10px solid var(--cor);
-  border-radius: 12px; padding: 10px 12px; color: {TEXTO}; line-height: 1.35;
-  box-shadow: 0 1px 4px rgba(16, 42, 51, .10);
+  background: #ffffff;
+  border: 1px solid {BORDA};
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: {TEXTO};
+  line-height: 1.4;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }}
-.poltrona.critico {{ border: 3px solid var(--cor); border-left-width: 10px; }}
-.poltrona .num {{ font-size: 18px; font-weight: 800; color: {TEXTO_2}; letter-spacing: .3px; }}
+.poltrona:hover {{
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(15, 39, 68, 0.08);
+  border-color: #cbd5e1;
+}}
+.poltrona::before {{
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  background: var(--cor);
+  border-radius: 12px 0 0 12px;
+}}
+.poltrona.critico {{
+  border: 1.5px solid var(--cor);
+  box-shadow: 0 0 0 3px rgba(198, 40, 40, 0.1);
+}}
+.poltrona .num {{
+  font-size: 11.5px;
+  font-weight: 800;
+  color: {TEXTO_2};
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}}
 .poltrona .selo {{
-  display: inline-block; background: var(--tinta); border: 2px solid var(--cor);
-  border-radius: 999px; padding: 2px 12px; margin: 6px 0; font-size: 18px; font-weight: 800;
-  white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--tinta);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  padding: 2px 10px;
+  margin: 5px 0;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }}
-.poltrona .det {{ font-size: 18px; }}
-.grupo {{ display: inline-flex; align-items: flex-start; gap: 6px; font-size: 17px; font-weight: 700;
-          border: 1px solid {BORDA}; border-radius: 10px; padding: 2px 10px; margin: 2px 0;
-          background: #fff; line-height: 1.25; }}
-.grupo .bola {{ width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; margin-top: 3px;
-                border: 1px solid rgba(0, 0, 0, .25); }}
-.grupo .obs {{ display: block; font-size: 15px; font-weight: 600; color: {TEXTO_2}; }}
+.poltrona .det {{
+  font-size: 13px;
+  color: #334155;
+  margin-top: 3px;
+}}
+.grupo {{
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid {BORDA};
+  border-radius: 6px;
+  padding: 1px 8px;
+  margin: 2px 0;
+  background: #ffffff;
+  line-height: 1.25;
+}}
+.grupo .bola {{
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+}}
+.grupo .obs {{
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: {TEXTO_2};
+}}
 
 /* ---------- Alertas ---------- */
 .alerta {{
-  background: var(--tinta); border: 2px solid var(--cor); border-left: 10px solid var(--cor);
-  border-radius: 12px; padding: 12px 16px; margin: 8px 0; font-size: 20px; font-weight: 600; color: {TEXTO};
+  background: var(--tinta);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-left: 5px solid var(--cor);
+  border-radius: 10px;
+  padding: 11px 16px;
+  margin: 7px 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: {TEXTO};
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
 }}
 
 /* ---------- Destaque de remarcações ---------- */
-.rem {{ display: flex; align-items: stretch; gap: 14px; flex-wrap: wrap; }}
-.rem-lado {{ flex: 1 1 240px; background: var(--tinta); border: 3px solid var(--cor);
-            border-radius: 14px; padding: 14px 18px; color: {TEXTO}; }}
-.rem-titulo {{ font-size: 20px; font-weight: 800; color: {TEXTO_2}; text-transform: uppercase; }}
-.rem-num {{ font-size: 56px; font-weight: 900; line-height: 1.1; }}
-.rem-texto {{ font-size: 20px; font-weight: 600; }}
-.rem-seta {{ align-self: center; font-size: 40px; color: {TEAL}; }}
-.rem-nota {{ margin-top: 12px; font-size: 19px; color: {TEXTO}; }}
+.rem {{
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  flex-wrap: wrap;
+}}
+.rem-lado {{
+  flex: 1 1 220px;
+  background: var(--tinta);
+  border: 1.5px solid var(--cor);
+  border-radius: 12px;
+  padding: 14px 18px;
+  color: {TEXTO};
+  box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+}}
+.rem-titulo {{
+  font-size: 12px;
+  font-weight: 800;
+  color: {TEXTO_2};
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}}
+.rem-num {{
+  font-size: 36px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.8px;
+  margin: 2px 0;
+}}
+.rem-texto {{
+  font-size: 13px;
+  font-weight: 600;
+}}
+.rem-seta {{
+  align-self: center;
+  font-size: 28px;
+  color: {TEAL};
+}}
+.rem-nota {{
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: {TEXTO};
+}}
 
 /* ---------- Dashboard "O que melhorou" ---------- */
-.impacto {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }}
-.imp {{ background: #fff; border: 1px solid {BORDA}; border-top: 6px solid var(--cor);
-        border-radius: 16px; padding: 16px 18px; box-shadow: 0 4px 14px rgba(25, 55, 93, .06); }}
-.imp .ic {{ font-size: 28px; }}
-.imp .num {{ font-size: 44px; font-weight: 800; color: {MARINHO}; line-height: 1.1; letter-spacing: -1px; }}
-.imp .txt {{ font-size: 19px; font-weight: 700; color: {TEXTO}; }}
-.imp .det {{ font-size: 17px; color: {TEXTO_2}; margin-top: 4px; }}
-.historias {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }}
-.hist {{ background: #fff; border: 1px solid {BORDA}; border-radius: 16px; padding: 16px 18px;
-         box-shadow: 0 4px 14px rgba(25, 55, 93, .06); color: {TEXTO}; }}
-.hist .quem {{ display: flex; justify-content: space-between; align-items: center; gap: 8px;
-               font-size: 20px; font-weight: 800; color: {MARINHO}; flex-wrap: wrap; }}
-.hist .antes-depois {{ display: flex; align-items: stretch; gap: 10px; margin: 12px 0 8px; }}
-.hist .caixa {{ flex: 1 1 0; min-width: 0; border-radius: 12px; padding: 8px 12px; }}
-.hist .caixa.hoje {{ background: #f1f3f5; border: 1px solid #cfd6dc; }}
-.hist .caixa.prop {{ background: {TEAL_CLARO}; border: 1px solid #9fd0c9; }}
-.hist .rot {{ font-size: 16px; font-weight: 700; color: {TEXTO_2}; text-transform: uppercase; }}
-.hist .val {{ font-size: 28px; font-weight: 800; white-space: nowrap; }}
-.hist .val.palavra {{ font-size: 16px; white-space: nowrap; line-height: 2.1; }}
-.hist .seta {{ font-size: 28px; color: {TEAL}; align-self: center; }}
-.hist .ganho {{ display: inline-block; background: {TEAL}; color: #fff; border-radius: 999px;
-                padding: 4px 14px; font-size: 19px; font-weight: 800; }}
-.hist .ganho.neutro {{ background: #5f6f7e; }}
-.hist .frase {{ font-size: 18px; margin-top: 8px; }}
+.impacto {{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}}
+.imp {{
+  background: #ffffff;
+  border: 1px solid {BORDA};
+  border-top: 4px solid var(--cor);
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}}
+.imp:hover {{
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(15, 39, 68, 0.08);
+}}
+.imp .ic {{ font-size: 22px; }}
+.imp .num {{
+  font-size: 30px;
+  font-weight: 800;
+  color: {MARINHO};
+  line-height: 1.1;
+  letter-spacing: -0.6px;
+  margin: 2px 0;
+}}
+.imp .txt {{
+  font-size: 13.5px;
+  font-weight: 700;
+  color: {TEXTO};
+}}
+.imp .det {{
+  font-size: 12px;
+  color: {TEXTO_2};
+  margin-top: 3px;
+}}
+.historias {{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+}}
+.hist {{
+  background: #ffffff;
+  border: 1px solid {BORDA};
+  border-radius: 14px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  color: {TEXTO};
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}}
+.hist:hover {{
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(15, 39, 68, 0.08);
+}}
+.hist .quem {{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: {MARINHO};
+  flex-wrap: wrap;
+}}
+.hist .antes-depois {{
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin: 10px 0 8px;
+}}
+.hist .caixa {{
+  flex: 1 1 0;
+  min-width: 0;
+  border-radius: 8px;
+  padding: 6px 10px;
+}}
+.hist .caixa.hoje {{
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}}
+.hist .caixa.prop {{
+  background: {TEAL_CLARO};
+  border: 1px solid #99f6e4;
+}}
+.hist .rot {{
+  font-size: 11px;
+  font-weight: 700;
+  color: {TEXTO_2};
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}}
+.hist .val {{
+  font-size: 20px;
+  font-weight: 800;
+  white-space: nowrap;
+}}
+.hist .val.palavra {{
+  font-size: 13.5px;
+  white-space: nowrap;
+  line-height: 1.8;
+}}
+.hist .seta {{
+  font-size: 20px;
+  color: {TEAL};
+  align-self: center;
+}}
+.hist .ganho {{
+  display: inline-block;
+  background: {TEAL};
+  color: #ffffff;
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(13, 148, 136, 0.25);
+}}
+.hist .ganho.neutro {{ background: #64748b; }}
+.hist .frase {{
+  font-size: 13px;
+  margin-top: 8px;
+  line-height: 1.5;
+  color: #334155;
+}}
 
 /* ---------- Notificações no canto (st.toast) ---------- */
-[data-testid="stToast"] {{ min-width: 380px; border-left: 8px solid {TEAL};
-                           box-shadow: 0 8px 24px rgba(25, 55, 93, .25); }}
-[data-testid="stToast"] p {{ font-size: 19px !important; font-weight: 600; color: {TEXTO}; }}
+[data-testid="stToast"] {{
+  min-width: 320px;
+  border-left: 5px solid {TEAL};
+  border-radius: 10px;
+  box-shadow: 0 10px 25px -5px rgba(15, 39, 68, 0.2);
+}}
+[data-testid="stToast"] p {{
+  font-size: 13.5px !important;
+  font-weight: 600;
+  color: {TEXTO};
+}}
 
-/* ---------- Quadro de alertas flutuante (canto inferior direito) ---------- */
-.flutuante {{ position: fixed; right: 22px; bottom: 22px; z-index: 1000; width: 400px;
-              max-width: calc(100vw - 44px); background: #fff; border: 1px solid {BORDA};
-              border-left: 8px solid {TEAL}; border-radius: 16px;
-              box-shadow: 0 10px 30px rgba(25, 55, 93, .28); }}
-.flutuante summary {{ cursor: pointer; list-style: none; padding: 12px 16px; font-size: 20px;
-                      font-weight: 800; color: {MARINHO}; }}
+/* ---------- Quadro de alertas flutuante (Bottom-Right Drawer) ---------- */
+.flutuante {{
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 1000;
+  width: 360px;
+  max-width: calc(100vw - 40px);
+  background: #ffffff;
+  border: 1px solid {BORDA};
+  border-left: 5px solid {TEAL};
+  border-radius: 14px;
+  box-shadow: 0 20px 25px -5px rgba(15, 39, 68, 0.15), 0 8px 10px -6px rgba(15, 39, 68, 0.1);
+  backdrop-filter: blur(12px);
+}}
+.flutuante summary {{
+  cursor: pointer;
+  list-style: none;
+  padding: 11px 16px;
+  font-size: 14px;
+  font-weight: 800;
+  color: {MARINHO};
+}}
 .flutuante summary::-webkit-details-marker {{ display: none; }}
-.flutuante summary::after {{ content: "▲"; float: right; font-size: 16px; color: {TEXTO_2}; }}
+.flutuante summary::after {{
+  content: "▲";
+  float: right;
+  font-size: 12px;
+  color: {TEXTO_2};
+}}
 .flutuante[open] summary::after {{ content: "▼"; }}
-.fl-corpo {{ max-height: 32vh; overflow-y: auto; padding: 0 12px 12px; }}
-.fl-item {{ font-size: 17px; font-weight: 600; color: {TEXTO}; padding: 6px 10px; margin-top: 6px;
-            border-radius: 10px; background: #f5f8fa; border-left: 5px solid #b27600; }}
+.fl-corpo {{
+  max-height: 32vh;
+  overflow-y: auto;
+  padding: 0 12px 12px;
+}}
+.fl-item {{
+  font-size: 12.5px;
+  font-weight: 600;
+  color: {TEXTO};
+  padding: 6px 10px;
+  margin-top: 6px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border-left: 4px solid #b27600;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}}
 .fl-item[data-tipo="remarcado"], .fl-item[data-tipo="espera"],
 .fl-item[data-tipo="transporte"] {{ border-left-color: #c62828; }}
 .fl-item[data-tipo="alta"] {{ border-left-color: #4a3aa7; }}
-.fl-item.novo {{ animation: fl-entrar .7s ease-out; background: #fff8e6; }}
-.fl-selo {{ background: {TEAL}; color: #fff; border-radius: 999px; padding: 1px 8px;
-            font-size: 14px; font-weight: 800; }}
-.fl-badge {{ background: #c62828; color: #fff; border-radius: 999px; padding: 2px 10px;
-             font-size: 15px; margin-left: 6px; animation: fl-pulsar 1.4s ease-in-out 3; }}
-.fl-mais, .fl-vazio {{ font-size: 17px; color: {TEXTO_2}; padding: 8px 4px 0; }}
-@keyframes fl-entrar {{ from {{ transform: translateX(60px); opacity: 0; }}
-                        to {{ transform: translateX(0); opacity: 1; }} }}
-@keyframes fl-pulsar {{ 50% {{ transform: scale(1.15); }} }}
+.fl-item.novo {{ animation: fl-entrar .6s cubic-bezier(0.16, 1, 0.3, 1); background: #fffbeb; }}
+.fl-selo {{
+  background: {TEAL};
+  color: #ffffff;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+}}
+.fl-badge {{
+  background: #c62828;
+  color: #ffffff;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  margin-left: 6px;
+  animation: fl-pulsar 1.4s ease-in-out 3;
+}}
+.fl-mais, .fl-vazio {{
+  font-size: 12px;
+  color: {TEXTO_2};
+  padding: 6px 4px 0;
+}}
+@keyframes fl-entrar {{
+  from {{ transform: translateX(40px); opacity: 0; }}
+  to {{ transform: translateX(0); opacity: 1; }}
+}}
+@keyframes fl-pulsar {{ 50% {{ transform: scale(1.1); }} }}
 @media (prefers-reduced-motion: reduce) {{ .fl-item.novo, .fl-badge {{ animation: none; }} }}
 
-/* ---------- Kanban do fluxo ---------- */
-.kb-topo {{ display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0 12px; }}
-.kb-medidor {{ background: {TEAL_CLARO}; border: 1px solid #9fd0c9; border-radius: 999px;
-               padding: 6px 16px; font-size: 18px; font-weight: 800; color: {MARINHO}; }}
-.kb-medidor.cheio {{ background: #fdeaea; border-color: #c62828; color: #7f1d1d; }}
-.kanban {{ display: grid; grid-template-columns: repeat(6, minmax(165px, 1fr));
-           gap: 12px; overflow-x: auto; padding-bottom: 8px; }}
-.kb-col {{ background: #eef3f6; border: 1px solid {BORDA}; border-radius: 14px; padding: 8px;
-           min-width: 0;
-           min-height: 160px; }}
-.kb-cab {{ font-size: 19px; font-weight: 800; color: {MARINHO}; display: flex;
-           justify-content: space-between; align-items: center; gap: 6px; }}
-.kb-qtd {{ background: {MARINHO}; color: #fff; border-radius: 999px; padding: 1px 10px;
-           font-size: 16px; }}
-.kb-sub {{ font-size: 15px; color: {TEXTO_2}; margin-bottom: 8px; min-height: 20px; }}
-.kb-card {{ background: #fff; border: 1px solid {BORDA}; border-left: 6px solid var(--cor);
-            border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; color: {TEXTO};
-            box-shadow: 0 1px 3px rgba(25, 55, 93, .08); line-height: 1.35; }}
-.kb-card .kb-id {{ display: flex; justify-content: space-between; gap: 6px; font-size: 18px;
-                   font-weight: 800; color: {MARINHO}; }}
-.kb-card .kb-det {{ font-size: 16px; color: {TEXTO}; margin-top: 2px; }}
-.kb-card .kb-risco {{ font-size: 15px; font-weight: 700; margin-top: 4px; }}
-.kb-int {{ display: inline-block; background: #efe7d8; border: 1px solid #b08850;
-           color: #5a3d12; border-radius: 999px; padding: 0 8px; margin: 2px 0;
-           font-size: 14px; font-weight: 800; max-width: 100%; }}
-.kb-card .grupo {{ max-width: 100%; box-sizing: border-box; font-size: 16px; }}
-.kb-mais {{ font-size: 15px; color: {TEXTO_2}; text-align: center; padding: 4px; }}
-.kb-fora {{ margin-top: 10px; font-size: 17px; color: {TEXTO}; }}
-.kb-fora b {{ color: #7f1d1d; }}
+/* ---------- Kanban do fluxo (Modern Agile / Clinical Board) ---------- */
+.kb-topo {{
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 4px 0 12px;
+}}
+.kb-medidor {{
+  background: {TEAL_CLARO};
+  border: 1px solid #99f6e4;
+  border-radius: 8px;
+  padding: 5px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: {MARINHO};
+}}
+.kb-medidor.cheio {{
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}}
+.kanban {{
+  display: grid;
+  grid-template-columns: repeat(6, minmax(160px, 1fr));
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}}
+.kb-col {{
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px;
+  min-width: 0;
+  min-height: 150px;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);
+}}
+.kb-cab {{
+  font-size: 13.5px;
+  font-weight: 700;
+  color: {MARINHO};
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}}
+.kb-qtd {{
+  background: #e2e8f0;
+  color: #334155;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+}}
+.kb-sub {{
+  font-size: 11px;
+  color: {TEXTO_2};
+  margin-bottom: 8px;
+  min-height: 16px;
+  font-weight: 500;
+}}
+.kb-card {{
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 7px;
+  color: {TEXTO};
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  line-height: 1.35;
+  position: relative;
+  transition: all 0.15s ease;
+}}
+.kb-card:hover {{
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15, 39, 68, 0.08);
+  border-color: #cbd5e1;
+}}
+.kb-card::before {{
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--cor);
+  border-radius: 8px 0 0 8px;
+}}
+.kb-card .kb-id {{
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: {MARINHO};
+}}
+.kb-card .kb-det {{
+  font-size: 12px;
+  color: #334155;
+  margin-top: 3px;
+}}
+.kb-card .kb-risco {{
+  font-size: 11.5px;
+  font-weight: 700;
+  margin-top: 4px;
+}}
+.kb-int {{
+  display: inline-block;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  border-radius: 6px;
+  padding: 1px 7px;
+  margin: 3px 0;
+  font-size: 11px;
+  font-weight: 700;
+  max-width: 100%;
+}}
+.kb-card .grupo {{
+  max-width: 100%;
+  box-sizing: border-box;
+  font-size: 11.5px;
+}}
+.kb-mais {{
+  font-size: 11.5px;
+  color: {TEXTO_2};
+  text-align: center;
+  padding: 4px;
+  font-weight: 600;
+}}
+.kb-fora {{
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: {TEXTO};
+}}
+.kb-fora b {{ color: #991b1b; }}
 
-/* ---------- Tabelas ---------- */
-.tabela-grande {{ width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid {BORDA};
-                 border-radius: 12px; overflow: hidden; }}
-.tabela-grande th {{ background: {MARINHO}; color: #fff !important; text-align: left; padding: 12px; }}
-.tabela-grande td {{ padding: 11px 12px; border-bottom: 1px solid #e3eaee; color: {TEXTO}; background: #fff; }}
-.tabela-grande tr:nth-child(even) td {{ background: #f5f8fa; }}
-.tabela-grande tr:last-child td {{ border-bottom: none; }}
+/* ---------- Tabelas (Enterprise Data Grid) ---------- */
+.tabela-grande {{
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid {BORDA};
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 13px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}}
+.tabela-grande th {{
+  background: {MARINHO};
+  color: #ffffff !important;
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}}
+.tabela-grande td {{
+  padding: 9px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  background: #ffffff;
+  font-size: 13px;
+}}
+.tabela-grande tr:nth-child(even) td {{
+  background: #f8fafc;
+}}
+.tabela-grande tr:hover td {{
+  background: #f1f5f9;
+}}
+.tabela-grande tr:last-child td {{
+  border-bottom: none;
+}}
 </style>
 """
 
@@ -332,21 +1046,25 @@ def imagem_base64(caminho: Path) -> str:
 
 
 def cabecalho(subtitulo: str, chips: list[str], data_do_dia: date | None = None):
-    """Barra superior fina + cabeçalho branco com a marca Sinfonia + aviso fixo."""
+    """Barra superior fina + cabeçalho branco com a marca Sinfonia."""
     dia = (data_do_dia or date.today()).strftime("%d/%m/%Y")
     # No cabeçalho vai só o símbolo: o nome "Sinfonia" já aparece escrito ao lado
     logo = (f'<img src="data:image/png;base64,{imagem_base64(ICONE)}" alt="Símbolo do {NOME_APP}">'
             if ICONE.exists() else "")
     st.markdown(
-        f'<div class="topo" role="banner"><span>🗓️ {dia}</span>'
-        f'<span>Unidade de Quimioterapia</span>'
+        f'<div class="topo" role="banner">'
+        f'<div class="topo-esq">'
+        f'<span class="live-badge"><span class="live-dot"></span> Operação Ativa</span>'
+        f'<span>🗓️ {dia}</span>'
+        f'<span>🏥 Unidade de Quimioterapia Adulto</span>'
+        f'</div>'
         f'<span class="dir">Protótipo · Ideathon CBEB 2026</span></div>'
         f'<div class="cabecalho">{logo}'
-        f'<div><div class="titulo">{NOME_APP}</div>'
+        f'<div class="marca-bloco"><div class="titulo-linha"><span class="titulo">{NOME_APP}</span>'
+        f'<span class="badge-versao">SaaS Hospitalar</span></div>'
         f'<div class="sub">{html.escape(subtitulo)}</div></div>'
         f'<div class="chips">{"".join(f"<span class=chip>{html.escape(c)}</span>" for c in chips)}'
-        f'</div></div>'
-        f'<div class="aviso-fixo" role="alert">⚠️ {AVISO}</div>',
+        f'</div></div>',
         unsafe_allow_html=True)
 
 
@@ -356,8 +1074,7 @@ def rodape():
         f'<div class="rodape" role="contentinfo">'
         f'<div class="col"><div class="marca">{NOME_APP}</div>'
         f'Fluxo da quimioterapia em harmonia: a bolsa pronta quando o paciente senta.</div>'
-        f'<div class="col"><b>Protótipo com dados sintéticos.</b> Pacientes fictícios '
-        f'(PAC-001, PAC-002...). Não substitui decisão clínica nem o sistema Tasy.</div>'
+        f'<div class="col"><b>{AVISO}</b> Pacientes fictícios (PAC-001, PAC-002...).</div>'
         f'<div class="col"><b>Privacidade (LGPD):</b> nenhum dado real ou sensível de paciente é '
         f'usado ou armazenado. Tempos de preparo e infusão são informados pelo hospital.</div>'
         f'</div>',
@@ -370,8 +1087,8 @@ def bloco(nome: str):
 
 
 def ajuda(texto: str):
-    """Botão 'O que é isso?' com uma explicação simples."""
-    with st.popover("❓ O que é isso?"):
+    """Botão 'Como funciona' com uma explicação simples."""
+    with st.popover("ℹ️ Como funciona"):
         st.markdown(texto)
 
 
@@ -672,17 +1389,17 @@ def tabela(df: pd.DataFrame):
 
 
 def estilo_grafico(fig, titulo: str, altura: int = 420):
-    """Padrão dos gráficos: fonte grande, fundo branco, grade discreta."""
+    """Padrão dos gráficos: tipografia moderna e corporativa, fundo limpo, grade discreta."""
     fig.update_layout(
         # O título fica no bloco da página (com o botão de ajuda); aqui só para leitores de tela
         title=None, meta=titulo,
-        font=dict(size=18, color=TEXTO),
+        font=dict(size=12, family="Plus Jakarta Sans, Inter, sans-serif", color=TEXTO),
         template="plotly_white", height=altura,
         paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, font=dict(size=18), title=None),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, font=dict(size=12, family="Plus Jakarta Sans, Inter, sans-serif"), title=None),
         margin=dict(l=10, r=10, t=50, b=10),
-        hoverlabel=dict(font_size=18),
+        hoverlabel=dict(font_size=12, font_family="Plus Jakarta Sans, Inter, sans-serif"),
     )
-    fig.update_xaxes(gridcolor="#e3eaee", tickfont=dict(size=16), title_font=dict(size=18))
-    fig.update_yaxes(gridcolor="#e3eaee", tickfont=dict(size=16), title_font=dict(size=18))
+    fig.update_xaxes(gridcolor="#f1f5f9", tickfont=dict(size=11, family="Plus Jakarta Sans, Inter, sans-serif"), title_font=dict(size=12, family="Plus Jakarta Sans, Inter, sans-serif"))
+    fig.update_yaxes(gridcolor="#f1f5f9", tickfont=dict(size=11, family="Plus Jakarta Sans, Inter, sans-serif"), title_font=dict(size=12, family="Plus Jakarta Sans, Inter, sans-serif"))
     return fig
