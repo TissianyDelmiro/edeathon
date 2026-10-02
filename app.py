@@ -329,19 +329,41 @@ with aba_painel:
             "cada paciente como um cartão andando pelas etapas do dia (agendado → chegou → "
             "na poltrona → em infusão → alta → concluído), com os limites de poltronas e da "
             "capela no topo."))
-        modo = st.radio("Ver como", ["🔲 Grade", "📋 Lista", "🗂️ Kanban"], horizontal=True,
-                        key="modo_poltronas")
+        c_modo, c_filtro = st.columns([3, 2], vertical_alignment="center")
+        with c_modo:
+            modo = st.radio("Ver como", ["🔲 Grade", "📋 Lista", "🗂️ Kanban"], horizontal=True,
+                            key="modo_poltronas")
+        with c_filtro:
+            filtro_origem_painel = st.selectbox(
+                "📍 Filtrar procedência",
+                ["Todos os pacientes", "🏙️ Capital", "🚐 Interior (transporte municipal)"],
+                key="filtro_origem_painel"
+            )
+
+        if filtro_origem_painel.startswith("🏙️"):
+            ag_visual = ag[~ag["interior"].astype(bool)]
+            estado_visual = estado[estado["paciente"].isin(ag_visual["paciente"]) | estado["paciente"].isna()]
+        elif filtro_origem_painel.startswith("🚐"):
+            ag_visual = ag[ag["interior"].astype(bool)]
+            estado_visual = estado[estado["paciente"].isin(ag_visual["paciente"])]
+        else:
+            ag_visual = ag
+            estado_visual = estado
+
+        if filtro_origem_painel != "Todos os pacientes":
+            st.caption(f"Mostrando apenas pacientes de: **{filtro_origem_painel}**")
+
         if modo == "📋 Lista":
-            ui.lista_poltronas(estado, hhmm)
+            ui.lista_poltronas(estado_visual, hhmm)
         elif modo == "🗂️ Kanban":
             st.caption("Cada cartão é um paciente; cada coluna, uma etapa. Os mais urgentes "
                        "vêm primeiro: ⛔ **em risco**, ⚠️ **atenção**; cartão sem selo e com "
                        "borda verde está **no prazo**. 🚐 = paciente do interior, com a hora em "
                        "que o transporte volta.")
-            ui.kanban(P.kanban(ag, t, prem.folga_transporte), P.ocupacao_kanban(ag, t),
+            ui.kanban(P.kanban(ag_visual, t, prem.folga_transporte), P.ocupacao_kanban(ag, t),
                       prem.n_poltronas, prem.capacidade_capela)
         else:
-            ui.grade_poltronas(estado, hhmm)
+            ui.grade_poltronas(estado_visual, hhmm)
 
     # Fila da capela
     st.write("")
@@ -856,6 +878,7 @@ with aba_agenda:
 
         tabela_agenda = pd.DataFrame({
             "Paciente": ag["paciente"],
+            "Procedência": ag["interior"].map(lambda x: "🚐 Interior" if x else "🏙️ Capital"),
             "Protocolo": ag["protocolo"],
             "Tipo de tratamento": ag["perfil"].map(ROTULO),
             "Horário limite": ag["limite_min"].map(hhmm),
@@ -866,15 +889,28 @@ with aba_agenda:
             "Poltrona": ag["poltrona"].astype("Int64"),
         })
         with ui.bloco("exportar"):
-            c1, c2 = st.columns([3, 2], vertical_alignment="center")
+            c1, c2, c3 = st.columns([3, 3, 2], vertical_alignment="center")
             c1.markdown("Horários recomendados para cada paciente fictício. "
                         "As durações vêm das premissas informadas pelo hospital.")
+            with c2:
+                filtro_origem_agenda = st.selectbox(
+                    "📍 Filtrar procedência",
+                    ["Todos os pacientes", "🏙️ Apenas Capital", "🚐 Apenas Interior"],
+                    key="filtro_origem_agenda"
+                )
+            if filtro_origem_agenda.startswith("🏙️"):
+                tab_filtrada = tabela_agenda[tabela_agenda["Procedência"] == "🏙️ Capital"]
+            elif filtro_origem_agenda.startswith("🚐"):
+                tab_filtrada = tabela_agenda[tabela_agenda["Procedência"] == "🚐 Interior"]
+            else:
+                tab_filtrada = tabela_agenda
+
             # No CSV o grupo vai sem emoji, com a cor por extenso (abre melhor no Excel)
-            csv = tabela_agenda.assign(**{
-                "Tipo de tratamento": ag["perfil"].map(
+            csv = tab_filtrada.assign(**{
+                "Tipo de tratamento": ag.loc[tab_filtrada.index, "perfil"].map(
                     lambda g: g + (" (a confirmar)" if g in A_CONFIRMAR else "")).to_numpy(),
-                "Cor na folha do setor": ag["perfil"].map(COR_DO_GRUPO).to_numpy()})
-            c2.download_button("⬇️ Baixar agenda (CSV)",
+                "Cor na folha do setor": ag.loc[tab_filtrada.index, "perfil"].map(COR_DO_GRUPO).to_numpy()})
+            c3.download_button("⬇️ Baixar agenda (CSV)",
                                csv.to_csv(index=False, sep=";").encode("utf-8-sig"),
                                file_name="agenda_otimizada.csv", mime="text/csv",
                                type="primary", width="stretch")
@@ -932,7 +968,9 @@ with aba_agenda:
                 "A chegada recomendada fica sempre pelo menos "
                 f"{prem.folga_limite} min antes do horário limite do protocolo. "
                 "Use o botão **Baixar agenda** para abrir no Excel."))
-            ui.tabela(tabela_agenda)
+            if filtro_origem_agenda != "Todos os pacientes":
+                st.caption(f"Filtrando: **{filtro_origem_agenda}** ({len(tab_filtrada)} de {len(tabela_agenda)} pacientes)")
+            ui.tabela(tab_filtrada)
 
 # ---------------------------------------------------------------------------
 # Aba 5 – Premissas
